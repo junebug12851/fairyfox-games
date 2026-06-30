@@ -1,0 +1,239 @@
+/**
+ * Orbit Slingshot — pure game core (no DOM, no canvas, no timers).
+ *
+ * The whole simulation as plain data + pure functions, so it can be unit-tested
+ * headlessly in Node and reused by the browser render shell
+ * (orbit-slingshot.shell.js) without modification. Nothing in here touches the
+ * document.
+ *
+ * The game: a probe orbits a planet under Newtonian gravity. You hold one control
+ * to fire a prograde thrust (along your velocity), adding energy and widening the
+ * orbit; release and gravity reels you back in. Fly through the glowing targets to
+ * score. Crash into the planet, or let the orbit decay/escape off the edge of
+ * space, and the run ends. One control, one mechanic — beat your own score.
+ *
+ * Integration is **semi-implicit (symplectic) Euler** — velocity is updated from
+ * the acceleration at the current position, then position is advanced by the new
+ * velocity. That keeps a circular orbit bounded over long runs instead of spiraling
+ * out the way naive (explicit) Euler does.
+ *
+ * Design note / the bug this structure guards against:
+ * the seeded circular-orbit start must NOT begin inside the planet or off-screen,
+ * or the run dies on tick one (the "frame-one death" failure the whole separation
+ * exists to make testable). `reset()` seeds a clean circular orbit at `R0`, and the
+ * suite pins that tick one is survivable.
+ *
+ * @module orbit-slingshot.core
+ */
+
+/**
+ * Tuning constants. Pixel units; rates per fixed 60fps tick. `GM` is the
+ * gravitational parameter (G·M) in px^3/tick^2; for a circular orbit at radius r the
+ * speed is sqrt(GM/r).
+ * @typedef {Object} OrbitConfig
+ */
+export const CONFIG = Object.freeze({
+  GM: 980,            // gravitational parameter (G·M)
+  R0: 170,            // starting orbital radius (px)
+  PLANET_R: 26,       // planet radius (px)
+  PROBE_R: 5,         // probe radius (px)
+  THRUST: 0.02,       // prograde acceleration while the control is held (px/tick^2)
+  TARGET_R: 20,       // target pickup radius (px)
+  TARGET_MIN_R: 90,   // nearest a target spawns to the planet centre (px)
+  TARGET_MAX_R: 240,  // farthest a target spawns from the planet centre (px)
+  EPS: 1,             // gravity softening floor to avoid divide-by-zero (px)
+});
+
+/**
+ * A 2D vector.
+ * @typedef {{x:number, y:number}} Vec
+ */
+
+/**
+ * Full game state. Plain data — safe to clone, serialize, or snapshot.
+ * @typedef {Object} GameState
+ * @property {number} w                  playfield width (px)
+ * @property {number} h                  playfield height (px)
+ * @property {OrbitConfig} cfg           tuning constants in effect
+ * @property {() => number} rng          RNG returning [0,1); injectable for tests
+ * @property {'menu'|'play'|'dead'} phase current lifecycle phase
+ * @property {Vec} pos                   probe position
+ * @property {Vec} vel                   probe velocity
+ * @property {Vec} target               active target position
+ * @property {number} score              targets collected this run
+ * @property {number} t                  ticks elapsed this run
+ * @property {boolean} thrusting         whether thrust was applied last tick (view)
+ * @property {null|'crash'|'escape'} cause  how the run ended, if dead
+ */
+
+/**
+ * The planet's position — the centre of the playfield.
+ * @param {GameState} g
+ * @returns {Vec}
+ */
+export function planet(g) {
+  return { x: g.w / 2, y: g.h / 2 };
+}
+
+/**
+ * Create a new game. Does not start it (phase is 'menu'); call {@link start}.
+ * @param {number} width playfield width (px)
+ * @param {number} height playfield height (px)
+ * @param {Object} [opts]
+ * @param {() => number} [opts.rng=Math.random] RNG returning [0,1)
+ * @param {Partial<OrbitConfig>} [opts.config] config overrides (mainly tests)
+ * @returns {GameState}
+ */
+export function createGame(width, height, opts = {}) {
+  const cfg = opts.config ? Object.freeze({ ...CONFIG, ...opts.config }) : CONFIG;
+  /** @type {GameState} */
+  const g = {
+    w: width, h: height, cfg,
+    rng: opts.rng || Math.random,
+    phase: 'menu',
+    pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 },
+    target: { x: 0, y: 0 },
+    score: 0, t: 0, thrusting: false, cause: null,
+  };
+  reset(g);
+  return g;
+}
+
+/**
+ * Reset a game to a fresh circular orbit in-place (probe at R0 to the right of the
+ * planet, moving at circular speed; score 0). Leaves `phase` untouched.
+ * @param {GameState} g
+ * @returns {GameState} the same state, mutated
+ */
+export function reset(g) {
+  const p = planet(g);
+  const v = Math.sqrt(g.cfg.GM / g.cfg.R0); // circular-orbit speed at R0
+  g.pos = { x: p.x + g.cfg.R0, y: p.y };
+  g.vel = { x: 0, y: v };                   // perpendicular → counter-clockwise orbit
+  g.score = 0;
+  g.t = 0;
+  g.thrusting = false;
+  g.cause = null;
+  pickTarget(g);
+  return g;
+}
+
+/**
+ * Begin a run: reset and flip to 'play'.
+ * @param {GameState} g
+ * @returns {GameState}
+ */
+export function start(g) {
+  reset(g);
+  g.phase = 'play';
+  return g;
+}
+
+/**
+ * Place a fresh target at a random angle and radius in the reachable annulus.
+ * @param {GameState} g
+ * @returns {Vec} the new target position
+ */
+export function pickTarget(g) {
+  const p = planet(g);
+  const ang = g.rng() * Math.PI * 2;
+  const rr = g.cfg.TARGET_MIN_R + g.rng() * (g.cfg.TARGET_MAX_R - g.cfg.TARGET_MIN_R);
+  g.target = { x: p.x + Math.cos(ang) * rr, y: p.y + Math.sin(ang) * rr };
+  return g.target;
+}
+
+/**
+ * Gravitational acceleration on the probe at a given position: -GM·r/|r|^3,
+ * softened by EPS to stay finite at the centre.
+ * @param {GameState} g
+ * @param {Vec} pos
+ * @returns {Vec} acceleration vector
+ */
+export function gravityAt(g, pos) {
+  const p = planet(g);
+  const rx = pos.x - p.x, ry = pos.y - p.y;
+  const d = Math.max(g.cfg.EPS, Math.hypot(rx, ry));
+  const f = -g.cfg.GM / (d * d * d);
+  return { x: rx * f, y: ry * f };
+}
+
+/**
+ * Current probe speed (magnitude of velocity).
+ * @param {GameState} g
+ * @returns {number}
+ */
+export function speed(g) {
+  return Math.hypot(g.vel.x, g.vel.y);
+}
+
+/**
+ * Distance from the probe to the planet centre.
+ * @param {GameState} g
+ * @returns {number}
+ */
+export function distToPlanet(g) {
+  const p = planet(g);
+  return Math.hypot(g.pos.x - p.x, g.pos.y - p.y);
+}
+
+/**
+ * Has the probe struck the planet?
+ * @param {GameState} g
+ * @returns {boolean}
+ */
+export function hitPlanet(g) {
+  return distToPlanet(g) <= g.cfg.PLANET_R + g.cfg.PROBE_R;
+}
+
+/**
+ * Has the probe left the playfield (escaped into deep space)?
+ * @param {GameState} g
+ * @returns {boolean}
+ */
+export function outOfBounds(g) {
+  return g.pos.x < 0 || g.pos.x > g.w || g.pos.y < 0 || g.pos.y > g.h;
+}
+
+/**
+ * Result of a single {@link tick}.
+ * @typedef {{scored:boolean, died:boolean, cause:(null|'crash'|'escape')}} TickResult
+ */
+
+/**
+ * Advance the simulation one fixed tick (semi-implicit Euler).
+ * Order: gravity (+ optional prograde thrust) → integrate velocity → integrate
+ * position → death checks (crash, then escape) → target pickup. A death
+ * short-circuits before scoring. No-op unless phase is 'play'.
+ * @param {GameState} g
+ * @param {{thrust?:boolean}} [input]
+ * @returns {TickResult}
+ */
+export function tick(g, input = {}) {
+  if (g.phase !== 'play') return { scored: false, died: false, cause: null };
+  g.t++;
+  const thrust = !!input.thrust;
+  g.thrusting = thrust;
+
+  const a = gravityAt(g, g.pos);
+  if (thrust) {
+    const s = speed(g);
+    if (s > 1e-6) {
+      a.x += (g.vel.x / s) * g.cfg.THRUST;
+      a.y += (g.vel.y / s) * g.cfg.THRUST;
+    }
+  }
+  // semi-implicit Euler: velocity from accel at current position, then move.
+  g.vel.x += a.x; g.vel.y += a.y;
+  g.pos.x += g.vel.x; g.pos.y += g.vel.y;
+
+  if (hitPlanet(g)) { g.phase = 'dead'; g.cause = 'crash'; return { scored: false, died: true, cause: 'crash' }; }
+  if (outOfBounds(g)) { g.phase = 'dead'; g.cause = 'escape'; return { scored: false, died: true, cause: 'escape' }; }
+
+  let scored = false;
+  if (Math.hypot(g.pos.x - g.target.x, g.pos.y - g.target.y) < g.cfg.TARGET_R + g.cfg.PROBE_R) {
+    g.score++;
+    scored = true;
+    pickTarget(g);
+  }
+  return { scored, died: false, cause: null };
+}
