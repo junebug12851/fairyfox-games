@@ -2,7 +2,7 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.2.0` (single source of truth: repo-root `VERSION`).
+**Version:** `0.3.0` (single source of truth: repo-root `VERSION`).
 
 ## Current state (read this first)
 
@@ -25,6 +25,9 @@ the fairyfox.io mesh.
   as it crosses the target band; the window tightens each hit, three lives. Pure core
   + 18-test suite (incl. the inclusive catch-tolerance boundary regression). Done and
   playable.
+- **Orbit Slingshot** (`games/orbit-slingshot/`) — a gravity game: hold to thrust a
+  probe around a planet, sweep targets, don't crash or escape. Pure core (symplectic
+  Euler) + 16-test suite (incl. a 600-tick orbit-stability check). Done and playable.
 
 ## In flight / awaiting
 

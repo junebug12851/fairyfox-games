@@ -1,0 +1,11 @@
+{
+  "name": "orbit-slingshot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Orbit Slingshot — a one-mechanic, beat-your-own-score gravity game. Pure logic core + browser render shell.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "license": "MIT"
+}
