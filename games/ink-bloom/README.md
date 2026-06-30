@@ -13,16 +13,22 @@ pointer at a capped rate, so it flows in curves rather than snapping. Click or p
 
 ```
 ink-bloom/
-├── index.html            # player shell: canvas, input, fixed-timestep loop, eye-candy
-├── ink-bloom.core.js     # pure simulation — no DOM/canvas/timers, fully JSDoc'd
+├── index.html             # markup + a boot-failure fallback (visible error, not a dead screen)
+├── ink-bloom.shell.js     # render shell: canvas, input, fixed-timestep loop, eye-candy
+├── ink-bloom.core.js      # pure simulation — no DOM/canvas/timers, fully JSDoc'd
 ├── ink-bloom.core.test.js
-└── package.json          # { "type": "module" }
+└── package.json           # { "type": "module" }
 ```
 
 All the rules live in `ink-bloom.core.js` as plain data and pure functions
 (`createGame`, `tick`, `steer`, `stepHead`, `hitWall`, `hitSelf`, `tryEat`, …). The
 shell never decides game logic — it reads state and draws it, feeds input in, and
 calls `tick()` on a fixed 60 Hz timestep.
+
+The shell is loaded as an **external module** (`<script type="module"
+src="./ink-bloom.shell.js">`) — the conventional, robust way to ship it — and
+`index.html` carries a small classic-script fallback that surfaces a visible message
+if the module ever fails to load, so a load failure is never a silently dead screen.
 
 ### Design note: the trail ordering
 
