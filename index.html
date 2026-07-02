@@ -67,11 +67,12 @@
 <nav class="subnav" aria-label="Fairy Fox Games section">
   <div class="wrap">
     <a class="sub-brand" href="./">Fairy Fox Games</a>
-    <span class="sep" aria-hidden="true"></span>
     <a href="#games" class="active">The Collection</a>
+    <span class="sep" aria-hidden="true"></span>
     <a href="./legal/privacy.html">Privacy</a>
     <a href="./legal/terms.html">Terms</a>
     <a href="./legal/cookies.html">Cookies</a>
+    <span class="sep" aria-hidden="true"></span>
     <a class="ext" href="https://github.com/junebug12851/fairyfox-games">Source ↗</a>
   </div>
 </nav>
@@ -84,7 +85,6 @@
           <div class="mast-name">Fairy Fox Games</div>
           <p class="mast-tag">An experiment with an ever-growing library of small, simple games.</p>
           <div class="mast-meta" style="margin-top:.9rem">
-            <span class="mchip"><span class="pulse-dot"></span> Active</span>
             <span class="mchip">Games <b>7</b></span>
           </div>
         </div>
@@ -98,7 +98,6 @@
         <div class="label">
           <h2>The collection</h2>
         </div>
-        <a class="more ext" href="https://github.com/junebug12851/fairyfox-games">Source on GitHub ↗</a>
       </div>
 
       <!-- One card per game. Keep in step with games/ and the root README.
@@ -180,7 +179,8 @@
 
 </main>
 
-<!-- Footer: same structure as the fairyfox.io site footer. -->
+<!-- Footer: the shared fairyfox.io site footer, copied so the page reads as one site.
+     Mirrors the hub's _includes/footer.html (Liquid resolved to absolute links). -->
 <footer class="site-footer">
   <div class="wrap">
     <div class="footer-brand">
@@ -188,8 +188,7 @@
         <img class="brand-logo" src="https://fairyfox.io/assets/icons/fox.png" alt="" aria-hidden="true">
         <span class="brand-name">Fairy Fox</span>
       </a>
-      <p>An experiment with an ever-growing, ever-expanding library of small, simple games.
-        Part of the Fairy Fox project mesh.</p>
+      <p>The project hub and documentation library for Fairy Fox's software work.</p>
     </div>
     <div class="footer-col">
       <h4>Explore</h4>
@@ -200,29 +199,23 @@
       <a href="https://fairyfox.io/about/">About</a>
     </div>
     <div class="footer-col">
-      <h4>Games</h4>
-      <a href="./games/ink-bloom/">Ink Bloom</a>
-      <a href="./games/echo-chamber/">Echo Chamber</a>
-      <a href="./games/orbit-slingshot/">Orbit Slingshot</a>
-      <a href="./games/polarity/">Polarity</a>
-      <a href="./games/ricochet/">Ricochet</a>
-      <a href="./games/skyline/">Skyline</a>
-      <a href="./games/loft/">Loft</a>
+      <h4>Projects</h4>
+      <a href="https://fairyfox.io/projects/pokered-save-editor-2/">Pokered Save Editor 2</a>
+      <a href="https://fairyfox.io/projects/random-ai-prompt/">Random AI Prompt</a>
+      <a href="https://fairyfox.io/projects/pokered-save-editor/">Pokered Save Editor</a>
+      <a href="https://fairyfox.io/projects/fairyfox-games/">Fairy Fox Games</a>
+      <a href="https://fairyfox.io/projects/fairyfox-io/">fairyfox.io</a>
     </div>
     <div class="footer-col">
       <h4>Elsewhere</h4>
-      <a href="https://github.com/junebug12851/fairyfox-games">GitHub ↗</a>
-      <a href="https://games.fairyfox.io/">games.fairyfox.io ↗</a>
-      <a href="https://fairyfox.io/projects/fairyfox-games/">Node page</a>
+      <a href="https://github.com/junebug12851">GitHub ↗</a>
+      <a href="https://fairyfox.io/feed.xml">Atom feed</a>
     </div>
   </div>
   <div class="footer-bar">
     <div class="wrap">
       <span>© 2026 Fairy Fox</span>
-      <span>Part of the Fairy Fox mesh · MIT licensed</span>
-      <a href="./legal/privacy.html">Privacy</a>
-      <a href="./legal/terms.html">Terms</a>
-      <a href="./legal/cookies.html">Cookies</a>
+      <span>Built with Jekyll · deployed on GitHub Pages</span>
       <span class="spacer"></span>
       <a href="https://github.com/junebug12851">@junebug12851</a>
     </div>
