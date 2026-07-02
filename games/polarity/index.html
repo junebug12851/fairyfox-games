@@ -59,6 +59,39 @@
     -webkit-background-clip:text; background-clip:text; color:transparent;
     text-shadow:0 0 24px rgba(169,140,255,.25);
   }
+
+  /* Stage chip — a quiet HUD readout of the run's current stage + progress toward the
+     next (Growth Architecture Layer 1). Peripheral, never loud; pops on stage change. */
+  #stageChip {
+    position:absolute; top:20px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    pointer-events:none; transition:opacity .3s ease; color:#6ad;
+  }
+  #stageChip.hide { opacity:0; }
+  #stageName { font-size:11px; letter-spacing:.2em; text-transform:uppercase; opacity:.9; }
+  #stageBar { width:120px; height:3px; border-radius:3px; background:rgba(255,255,255,.1); overflow:hidden; }
+  #stageFill { height:100%; width:0%; background:currentColor; border-radius:3px; transition:width .25s ease; }
+  #stageChip.pop #stageName { animation:chipPop .5s ease; }
+  @keyframes chipPop { 0%{transform:scale(1)} 30%{transform:scale(1.28)} 100%{transform:scale(1)} }
+  @media (prefers-reduced-motion: reduce){ #stageChip.pop #stageName{ animation:none } #stageFill{ transition:none } }
+
+  /* Multiplier — the star of the loop. Big + hot when the combo climbs; dim at ×1. */
+  #mult {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%) scale(1);
+    pointer-events:none; opacity:.22; font-weight:800; font-size:clamp(34px,9vw,58px);
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:#8ab4ff;
+    text-shadow:0 0 22px currentColor; transition:opacity .12s ease;
+  }
+  #mult.hide { opacity:0 !important; }
+
+  /* Game-over run report (Growth Architecture Layers 2/3). */
+  .stageReached { margin-top:8px; font-size:13px; letter-spacing:.1em; text-transform:uppercase; opacity:.6; min-height:15px; }
+  .badges { display:flex; flex-direction:column; gap:6px; margin-top:14px; align-items:center; }
+  .badge { display:flex; flex-direction:column; gap:1px; padding:6px 14px; border-radius:10px;
+    background:rgba(122,249,208,.08); border:1px solid rgba(122,249,208,.22); max-width:280px; }
+  .badge b { font-size:13px; color:#7af9d0; letter-spacing:.04em; }
+  .badge span { font-size:11.5px; opacity:.6; }
+  .metaLine { margin-top:16px; font-size:12px; letter-spacing:.06em; opacity:.45; font-variant-numeric:tabular-nums; }
 </style>
 </head>
 <body>
@@ -69,26 +102,37 @@
     <div class="stat" id="best"><div class="label">Best</div><div class="val" id="bestVal">0</div></div>
   </div>
 
+  <div id="stageChip" class="hide">
+    <div id="stageName">Drift</div>
+    <div id="stageBar"><div id="stageFill"></div></div>
+  </div>
+
+  <div id="mult" class="hide">×1</div>
+
   <div id="milestone"></div>
 
   <div class="panel" id="start">
     <div class="title">Polarity</div>
-    <div class="sub">Charged gates stream in from the right. Click, tap, or press Space to flip
-      your charge — cyan (−) or magenta (+). Match the gate's colour to phase through and
-      score; clash and you're destroyed. It speeds up as you go.</div>
-    <div class="tip"><b>Tip:</b> flip <em>early</em> — set your charge while the gate is still
-      far off, then leave it. The stream keeps a steady rhythm, so read two gates ahead and
-      don't chase the line. A flip landed in the last instant counts as a <b>clutch save</b>,
-      tallied on game over. Milestones at 10, 25, 50, 100, 150, 200 — and the screen flashes
-      the instant you overtake your own best.</div>
+    <div class="sub">Charged gates rush in from the right. Click, tap, or press Space to flip
+      your charge — cyan (−) or magenta (+). Match the gate's colour to phase through; clash
+      and you're destroyed.</div>
+    <div class="tip"><b>The trick:</b> don't flip early to be safe — that resets your
+      <b>multiplier</b>. Wait and land the flip at the <em>last instant</em> and the multiplier
+      climbs (×2, ×3 … ×9), and every gate is worth that much. Play it safe for a steady trickle,
+      or ride the edge for a huge score — one bad read ends the run. It gets faster and the
+      patterns get meaner through the <b>stages</b> (Drift → Current → Riptide → Event horizon →
+      Singularity). Feats earn <b>badges</b> that stick across runs.</div>
     <div class="prompt">Click / Space to begin</div>
   </div>
 
   <div class="panel hide" id="gameover">
     <div class="title" id="overTitle">Polarity clash</div>
     <div class="final">Score<b id="finalScore">0</b></div>
+    <div class="stageReached" id="stageReached"></div>
     <div class="newbest" id="newbest"></div>
     <div class="clutch" id="clutch"></div>
+    <div class="badges" id="badges"></div>
+    <div class="metaLine" id="metaLine"></div>
     <div class="prompt">Click or press Space to try again</div>
   </div>
 </div>

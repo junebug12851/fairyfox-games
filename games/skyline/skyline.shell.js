@@ -35,14 +35,61 @@ const el = id => document.getElementById(id);
 const scoreEl = el('score'), bestEl = el('bestVal'), finalEl = el('finalScore');
 const newbestEl = el('newbest'), overTitle = el('overTitle'), statsEl = el('stats');
 const startPanel = el('start'), overPanel = el('gameover'), toastEl = el('toast');
+const stageChip = el('stageChip'), stageNameEl = el('stageName'), stageFill = el('stageFill');
+const badgesEl = el('badges'), metaLineEl = el('metaLine');
 
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
+function rgbStr(c, a) { return 'rgba(' + (c.r | 0) + ',' + (c.g | 0) + ',' + (c.b | 0) + ',' + a + ')'; }
+
+// Persistence (IO): the cross-run meta blob, backward-compatible with the legacy best.
 const BEST_KEY = 'skyline.best';
-let best = 0;
-try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+const META_KEY = 'skyline.meta';
+function loadMeta() {
+  let legacy = 0;
+  try { legacy = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(META_KEY) || 'null'); } catch (e) {}
+  return Sky.normalizeMeta(raw, legacy);
+}
+function saveMeta(m) {
+  try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch (e) {}
+  try { localStorage.setItem(BEST_KEY, String(m.best)); } catch (e) {}
+}
+let meta = loadMeta();
+let best = meta.best;
 bestEl.textContent = best;
 
 let W = 0, H = 0, DPR = 1, game = null;
 let camY = 0, flash = 0, shake = 0;
+// Stage feel state (Growth Layer 1)
+let stageIdx = 0, stagePulse = 0;
+let tintCur = hexToRgb('#8ab4ff'), tintTarget = { ...tintCur };
+
+/** Refresh the quiet HUD stage chip from the pure core. */
+function updateStageChip() {
+  if (!stageChip) return;
+  const pr = Sky.stageProgress(game.cfg, game.score);
+  if (stageNameEl) stageNameEl.textContent = pr.name;
+  if (stageFill) stageFill.style.width = Math.round(pr.frac * 100) + '%';
+  stageChip.style.color = pr.tint;
+}
+/** Enter a new stage: ease the sky tint, pop the chip, kick a soft beat. */
+function enterStage(i) {
+  stageIdx = i;
+  tintTarget = hexToRgb(game.cfg.STAGES[i].tint);
+  if (stageChip) { stageChip.classList.remove('pop'); void stageChip.offsetWidth; stageChip.classList.add('pop'); }
+  if (i > 0 && !reduceMotion) { stagePulse = 1; shake = Math.max(shake, 6); }
+  updateStageChip();
+}
+function beginRun() {
+  Sky.start(game);
+  stageIdx = 0; stagePulse = 0;
+  tintCur = hexToRgb(game.cfg.STAGES[0].tint); tintTarget = { ...tintCur };
+  if (stageChip) stageChip.classList.remove('hide');
+  scoreEl.textContent = '0';
+  updateStageChip();
+}
 let shards = [];               // falling sliced pieces (view-only)
 let toastTimer = 0;
 
@@ -72,8 +119,8 @@ game = Sky.createGame(W, H);
 
 // ── Input — one control: drop (also starts / restarts) ────────────────────────
 function press() {
-  if (game.phase === 'menu') { startPanel.classList.add('hide'); Sky.start(game); return; }
-  if (game.phase === 'dead') { overPanel.classList.add('hide'); Sky.start(game); return; }
+  if (game.phase === 'menu') { startPanel.classList.add('hide'); beginRun(); return; }
+  if (game.phase === 'dead') { overPanel.classList.add('hide'); beginRun(); return; }
   const prevScore = game.score;
   const r = Sky.drop(game);
   if (r.died) { onDeath(); return; }
@@ -88,6 +135,10 @@ function press() {
     }
     const label = Sky.milestoneBetween(game.cfg, prevScore, game.score);
     if (label) showToast(label);
+    // Stage transition — the readable arc of the run (Growth Layer 1).
+    const si = Sky.stageIndexAt(game.cfg, game.score);
+    if (si !== stageIdx) enterStage(si);
+    updateStageChip();
   }
 }
 window.addEventListener('mousedown', e => { e.preventDefault(); press(); });
@@ -119,12 +170,23 @@ function stepShards() {
 
 function onDeath() {
   shake = 16; flash = 0;
+  if (stageChip) stageChip.classList.add('hide');
   spawnShard(game.current.width); // the missed slab tumbles
   finalEl.textContent = game.score;
+
+  // Fold the run into the persistent meta (all logic pure in the core).
+  const stageIndex = Sky.stageIndexAt(game.cfg, game.score);
+  const summary = {
+    score: game.score, stageIndex,
+    placed: game.placed, perfects: game.perfects, bestStreak: game.bestStreak,
+  };
+  const prev = meta;
+  meta = Sky.applyRun(prev, summary, game.cfg);
+  saveMeta(meta);
+
   const record = game.score > best;
   if (record) {
-    best = game.score;
-    try { localStorage.setItem(BEST_KEY, best); } catch (e) {}
+    best = meta.best;
     bestEl.textContent = best;
     newbestEl.textContent = 'New best!';
     overTitle.textContent = 'New peak';
@@ -134,12 +196,25 @@ function onDeath() {
     overTitle.textContent = 'Toppled';
     overTitle.classList.remove('record');
   }
-  // Meaningful run summary — perfects + best perfect streak reward precision play.
+  // Run summary — stage reached + precision play.
   if (statsEl) {
     const p = game.perfects, s = game.bestStreak;
-    statsEl.textContent = p > 0
-      ? (p + (p === 1 ? ' perfect' : ' perfects') + ' · best streak ' + s)
-      : 'No perfects this run — aim for flush drops';
+    const perf = p > 0 ? ` · ${p} perfect${p === 1 ? '' : 's'} (best streak ${s})` : '';
+    statsEl.textContent = 'Reached ' + game.cfg.STAGES[stageIndex].name + perf;
+  }
+  if (badgesEl) {
+    badgesEl.innerHTML = '';
+    for (const a of Sky.newlyEarned(prev, meta)) {
+      const b = document.createElement('div');
+      b.className = 'badge';
+      b.innerHTML = '<b>' + a.label + '</b><span>' + a.desc + '</span>';
+      badgesEl.appendChild(b);
+    }
+  }
+  if (metaLineEl) {
+    const earned = Object.keys(meta.achieved).length;
+    metaLineEl.textContent = 'Run ' + meta.plays + ' · ' + meta.totals.floors
+      + ' floors all-time · ' + earned + '/' + Sky.ACHIEVEMENTS.length + ' badges';
   }
   setTimeout(() => overPanel.classList.remove('hide'), 380);
 }
@@ -155,6 +230,10 @@ function update(now) {
     if (camY < -0.2) camY *= 0.8; else camY = 0;
     if (flash > 0.01) flash *= 0.88; else flash = 0;
     if (shake > 0.3) shake *= 0.85; else shake = 0;
+    if (stagePulse > 0.01) stagePulse *= 0.94; else stagePulse = 0;
+    tintCur.r += (tintTarget.r - tintCur.r) * 0.08;
+    tintCur.g += (tintTarget.g - tintCur.g) * 0.08;
+    tintCur.b += (tintTarget.b - tintCur.b) * 0.08;
     stepShards();
     acc -= STEP_MS;
   }
@@ -194,6 +273,23 @@ function draw() {
   bg.addColorStop(1, '#11131f');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
+
+  // stage-tinted sky wash + a shockwave on stage change (Growth Layer 1 feel)
+  if (game.phase !== 'menu') {
+    const sky = ctx.createLinearGradient(0, 0, 0, H * 0.6);
+    sky.addColorStop(0, rgbStr(tintCur, 0.12));
+    sky.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H * 0.6);
+    if (stagePulse > 0.01) {
+      ctx.globalCompositeOperation = 'lighter';
+      const ly = H * yTopFrac;
+      ctx.strokeStyle = rgbStr(tintTarget, stagePulse * 0.5);
+      ctx.lineWidth = 3 * stagePulse + 0.5;
+      ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
 
   ctx.save();
   if (shake > 0.4) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);

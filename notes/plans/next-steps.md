@@ -2,13 +2,30 @@
 
 Ordered, current. Remove as done; history lives in `../sessions/`.
 
-1. **Keep growing each game a little deeper daily** — content + light, on-mechanic
-   depth (a tip, a milestone, a meaningful stat/feedback), staying simple and clean.
-   Never let a game become convoluted (the hard constraint).
-2. **Keep inventing fresh, mechanically-distinct experiments.** Verbs used so far:
+> **Hard lesson from v0.10.1 (Polarity playtest): meta-progression can't rescue a dull
+> core.** Stages/badges are a scoreboard *around* the loop; if the second-to-second
+> decision isn't tense, the game is still boring. So Wave 1 for each game now leads with a
+> **core-fun pass** — make the moment-to-moment choice have teeth (risk/reward, variety,
+> density, real reads) — *before* wrapping it in stages/meta. Polarity's precision-combo
+> (late-flip multiplier) is the worked example.
+
+1. **Roll out Growth Architecture Wave 1 to all 7 games** — the current focus. Promote
+   each game's milestones → **stages** (pure core + tests), add the **meta save blob**
+   (`<slug>.meta`, backward-compatible with legacy `<slug>.best`), a **stage HUD chip**,
+   and a **stage-change juice beat**. Pattern: `../reference/growth-architecture.md`;
+   per-game specifics + sequencing: `growth-roadmap.md`. **Polarity is the reference
+   build** — replicate its shape to the other six. Lowest-wave game first.
+2. **Then Wave 2 (achievements + cosmetic unlocks + run-report card) and Wave 3 (a
+   skill-safe mode each)** per the roadmap — one game per few daily runs, so the whole
+   collection visibly grows together over months.
+3. **Keep growing each game a little deeper daily** — but now *along the roadmap*, not
+   as random polish: a new stage name, an achievement, a cosmetic, a near-miss stat.
+   Always through the simple-but-deep checklist. Never convoluted (the hard constraint).
+4. **Keep inventing fresh, mechanically-distinct experiments.** Verbs used so far:
    steer (Ink Bloom), time-a-catch (Echo Chamber), thrust/physics (Orbit Slingshot),
-   flip-match (Polarity), aim-and-bounce (Ricochet), precision-stack (Skyline). Reach
-   for a genuinely new verb next — e.g. balance, route/connect, sort, grow-and-release.
+   flip-match (Polarity), aim-and-bounce (Ricochet), precision-stack (Skyline),
+   keep-aloft/rhythm (Loft). Reach for a genuinely new verb next — e.g. balance,
+   route/connect, sort, grow-and-release.
 
 ## From the hub-standards adoption (v0.9.0/0.9.1) — optional follow-ups
 
