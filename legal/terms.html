@@ -22,10 +22,8 @@
     border:1px solid color-mix(in srgb,var(--violet) 42%,transparent);
     border-radius:var(--radius);padding:1rem 1.15rem;margin:1.25rem 0 2rem}
   .tldr p{color:var(--text);margin:.4rem 0}
-  .legal-nav{display:flex;gap:1rem;flex-wrap:wrap;margin:0 0 1rem}
-  .legal-foot{border-top:1px solid var(--line);margin-top:2.5rem;padding-top:1.4rem;
+  .legal-scope{border-top:1px solid var(--line);margin-top:2.6rem;padding-top:1.4rem;
     color:var(--text-faint);font-size:.85rem}
-  .legal-foot a{color:var(--text-soft)}
 </style>
 </head>
 <body>
@@ -54,11 +52,12 @@
 <nav class="subnav" aria-label="Fairy Fox Games section">
   <div class="wrap">
     <a class="sub-brand" href="../">Fairy Fox Games</a>
-    <span class="sep" aria-hidden="true"></span>
     <a href="../#games">The Collection</a>
+    <span class="sep" aria-hidden="true"></span>
     <a href="privacy.html">Privacy</a>
     <a href="terms.html" class="active">Terms</a>
     <a href="cookies.html">Cookies</a>
+    <span class="sep" aria-hidden="true"></span>
     <a class="ext" href="https://github.com/junebug12851/fairyfox-games">Source ↗</a>
   </div>
 </nav>
@@ -152,17 +151,52 @@
   <p>If you have any questions about these Terms, contact us at
     <a href="mailto:fairy@fairyfox.io">fairy@fairyfox.io</a>.</p>
 
-  <div class="legal-foot">
-    <div class="legal-nav">
-      <a href="privacy.html">Privacy Policy</a>
-      <a href="terms.html">Terms &amp; Conditions</a>
-      <a href="cookies.html">Cookies Policy</a>
-      <a href="../">← Back to the games</a>
-    </div>
-    <p>Legal for the <strong>Fairy Fox Games</strong> collection. Fairy Fox Games is free,
-      open-source software released under the MIT license.</p>
-  </div>
+  <p class="legal-scope">Legal for the <strong>Fairy Fox Games</strong> collection — one project
+    within the wider Fairy Fox site. Fairy Fox Games is free, open-source software released under
+    the MIT license.</p>
 </main>
+
+<!-- Shared fairyfox.io site footer (copied so the page reads as one site). -->
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-brand">
+      <a class="brand" href="https://fairyfox.io/">
+        <img class="brand-logo" src="https://fairyfox.io/assets/icons/fox.png" alt="" aria-hidden="true">
+        <span class="brand-name">Fairy Fox</span>
+      </a>
+      <p>The project hub and documentation library for Fairy Fox's software work.</p>
+    </div>
+    <div class="footer-col">
+      <h4>Explore</h4>
+      <a href="https://fairyfox.io/projects/">Projects</a>
+      <a href="https://fairyfox.io/docs/">Documentation</a>
+      <a href="https://fairyfox.io/downloads/">Downloads</a>
+      <a href="https://fairyfox.io/blog/">Updates</a>
+      <a href="https://fairyfox.io/about/">About</a>
+    </div>
+    <div class="footer-col">
+      <h4>Projects</h4>
+      <a href="https://fairyfox.io/projects/pokered-save-editor-2/">Pokered Save Editor 2</a>
+      <a href="https://fairyfox.io/projects/random-ai-prompt/">Random AI Prompt</a>
+      <a href="https://fairyfox.io/projects/pokered-save-editor/">Pokered Save Editor</a>
+      <a href="https://fairyfox.io/projects/fairyfox-games/">Fairy Fox Games</a>
+      <a href="https://fairyfox.io/projects/fairyfox-io/">fairyfox.io</a>
+    </div>
+    <div class="footer-col">
+      <h4>Elsewhere</h4>
+      <a href="https://github.com/junebug12851">GitHub ↗</a>
+      <a href="https://fairyfox.io/feed.xml">Atom feed</a>
+    </div>
+  </div>
+  <div class="footer-bar">
+    <div class="wrap">
+      <span>© 2026 Fairy Fox</span>
+      <span>Built with Jekyll · deployed on GitHub Pages</span>
+      <span class="spacer"></span>
+      <a href="https://github.com/junebug12851">@junebug12851</a>
+    </div>
+  </div>
+</footer>
 
 <script>
   (function () {
