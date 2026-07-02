@@ -2,7 +2,7 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.9.1` (single source of truth: repo-root `VERSION`).
+**Version:** `0.10.0` (single source of truth: repo-root `VERSION`).
 
 ## Current state (read this first)
 
@@ -29,8 +29,12 @@ and Netlify at **`games.fairyfox.io`** (landing page), plus each game at
   sweep targets. **Close-pass skim bonus** + **skim tally / best-bonus** + a **Skim!**
   toast + milestones. Pure core (symplectic Euler) + 21 tests.
 - **Polarity** (`games/polarity/`) — flip cyan/magenta to match each gate; it speeds
-  up. **Milestones to 150/200**, a live **New best!** flash, and **clutch saves** —
-  last-moment flips tallied on game over (`isClutch`). Pure core + 25 tests.
+  up. **First game on the Growth Architecture**: a readable **stage arc** (Drift →
+  Current → Riptide → Event horizon → Singularity) with a HUD stage chip + ambient
+  field tint + stage-change beat, and **meta-progression** (`polarity.meta`: lifetime
+  runs/gates/furthest stage + 8 skill-safe badges, run-report card) — legacy
+  `polarity.best` preserved. Live **New best!** flash + **clutch saves** kept. Pure core
+  + 34 tests.
 - **Ricochet** (`games/ricochet/`) — aim and fire one shot that bounces off the walls,
   sweeping up targets in its path; **chain-bank toasts** (Double…**RICOCHET!**) plus
   **progression ranks** as your score climbs; three misses end it. Pure core
@@ -44,26 +48,36 @@ and Netlify at **`games.fairyfox.io`** (landing page), plus each game at
   another orb joins the air, up to six; a dropped orb ends it. **Progression ranks** +
   a **self-play winnability** test. Pure core + 24 tests.
 
-**Tests:** 159/159 green across the collection.
+**Tests:** 168/168 green across the collection.
 
 ## In flight / awaiting
 
+- **Growth Architecture rollout (v0.10.0).** A planning-first design pass landed the
+  reusable three-layer growth model (`notes/reference/game-design.md` +
+  `growth-architecture.md` + `plans/growth-roadmap.md`) and proved it on **Polarity**
+  (the reference build). **Wave 1 is queued for the other six games** — promote
+  milestones → stages, add the `<slug>.meta` blob + stage HUD + stage beat — replicating
+  Polarity's shape. Lowest-wave-first.
 - **Daily cadence — automated.** The 1am `fairyfox-games-daily` task ships a new
   unique game **and** grows an existing one each run; a sibling 1am
   `fairyfox-system-update-check-fairyfox-games` runs the standards check-for-updates.
+  The daily grow-step should now follow the roadmap, not random polish.
 
 ## Next
 
-- Keep growing each game a little deeper daily (content + light depth), staying simple
-  and clean — never convoluted (the hard constraint).
-- Keep inventing fresh, mechanically-distinct experiments.
+- **Roll Growth Architecture Wave 1 to the other six games** (echo-chamber,
+  orbit-slingshot, ink-bloom, ricochet, skyline, loft) against the Polarity pattern.
+- Then Wave 2 (achievements + cosmetics + run-report) and Wave 3 (a skill-safe mode
+  each) per `plans/growth-roadmap.md` — one game per few daily runs.
+- Keep each addition through the simple-but-deep checklist — never convoluted (the hard
+  constraint). Keep inventing fresh, mechanically-distinct experiments.
 
 ## Health
 
 | Area | Status |
 |------|--------|
 | Repo + branches (dev/main) | ✅ |
-| Tests (`node --test`) | ✅ 159/159 across 7 games |
+| Tests (`node --test`) | ✅ 168/168 across 7 games |
 | CI (node --test) | ✅ Workflow in place |
 | GitHub Pages (`fairyfox.io/fairyfox-games/`) | ✅ Deploys on push to `main` |
 | Netlify (`games.fairyfox.io`) | ✅ Live over HTTPS |

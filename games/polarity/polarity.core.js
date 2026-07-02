@@ -46,7 +46,46 @@ export const CONFIG = Object.freeze({
     Object.freeze({ score: 150, label: 'Event horizon' }),
     Object.freeze({ score: 200, label: 'Absolute zero' }),
   ]),
+  // Stages — the coarse, *readable* arc of a run (Growth Architecture Layer 1). Unlike
+  // the fine milestone flashes above, a stage is a named region of the difficulty curve
+  // the player sits inside: it drives a quiet HUD chip and an ambient field tint that
+  // shifts as you progress. `at` is the score to ENTER the stage; ordered ascending.
+  // Pure data — the simulation never branches on it; the shell reads it for feel.
+  STAGES: Object.freeze([
+    Object.freeze({ at: 0,   name: 'Drift',         tint: '#35e0ff' }),
+    Object.freeze({ at: 25,  name: 'Current',       tint: '#5ea8ff' }),
+    Object.freeze({ at: 60,  name: 'Riptide',       tint: '#a98cff' }),
+    Object.freeze({ at: 120, name: 'Event horizon', tint: '#ff5cc8' }),
+    Object.freeze({ at: 180, name: 'Singularity',   tint: '#ff8f6a' }),
+  ]),
 });
+
+/**
+ * Achievement definitions — plain data (Growth Architecture Layer 2). `test` is a pure
+ * predicate over (runSummary, metaAfterThisRun). Ordered; ids are stable forever, so
+ * the persisted `achieved` map keeps meaning across releases. Skill-safe: every one is
+ * a badge for a feat, never a persistent power. The shell toasts freshly-earned ones.
+ * @typedef {{id:string,label:string,desc:string,test:(s:RunSummary,m:Meta)=>boolean}} Achievement
+ * @type {ReadonlyArray<Achievement>}
+ */
+export const ACHIEVEMENTS = Object.freeze([
+  Object.freeze({ id: 'first-run',    label: 'First charge',   desc: 'Finish a run.',
+    test: (s, m) => m.plays >= 1 }),
+  Object.freeze({ id: 'reach-riptide',label: 'Riptide',        desc: 'Reach the Riptide stage.',
+    test: (s) => s.stageIndex >= 2 }),
+  Object.freeze({ id: 'event-horizon',label: 'Event horizon',  desc: 'Reach the Event horizon stage.',
+    test: (s) => s.stageIndex >= 3 }),
+  Object.freeze({ id: 'century',      label: 'Centurion',      desc: 'Phase 100 gates in one run.',
+    test: (s) => s.score >= 100 }),
+  Object.freeze({ id: 'clutch-3',     label: 'Ice in the veins',desc: '3 clutch saves in a single run.',
+    test: (s) => s.clutch >= 3 }),
+  Object.freeze({ id: 'clean-50',     label: 'Untouched',      desc: 'Reach 50 with no clutch saves.',
+    test: (s) => s.score >= 50 && s.clutch === 0 }),
+  Object.freeze({ id: 'lifetime-1k',  label: 'Thousand gates', desc: 'Phase 1,000 gates all-time.',
+    test: (s, m) => m.totals.gates >= 1000 }),
+  Object.freeze({ id: 'regular',      label: 'Regular',        desc: 'Finish 25 runs.',
+    test: (s, m) => m.plays >= 25 }),
+]);
 
 /**
  * A charged gate.
@@ -227,4 +266,132 @@ export function tick(g) {
     }
   }
   return { passed, died: false, clutch };
+}
+
+// ── Growth Architecture ─────────────────────────────────────────────────────────
+// Layer 1 (stages) + Layer 2 (meta-progression) as pure data + pure functions, so all
+// the progression *logic* is unit-tested headlessly. The shell owns only the IO:
+// localStorage load/save, DOM, and canvas. See notes/reference/growth-architecture.md.
+
+/**
+ * Index of the current stage for a score — the highest STAGES entry whose `at` the
+ * score has reached. Clamps to the last stage. Pure.
+ * @param {PolarityConfig} cfg
+ * @param {number} score
+ * @returns {number} 0..STAGES.length-1
+ */
+export function stageIndexAt(cfg, score) {
+  const s = (cfg && cfg.STAGES) || [];
+  let i = 0;
+  for (let k = 0; k < s.length; k++) if (score >= s[k].at) i = k;
+  return i;
+}
+
+/**
+ * The current stage object for a score. Pure.
+ * @param {PolarityConfig} cfg
+ * @param {number} score
+ * @returns {{at:number,name:string,tint:string}}
+ */
+export function stageAt(cfg, score) {
+  return cfg.STAGES[stageIndexAt(cfg, score)];
+}
+
+/**
+ * Progress through the current stage toward the next — drives the quiet HUD chip and
+ * its progress bar. `frac` is 0 at a stage boundary and approaches 1 just before the
+ * next; `isLast` is true only in the final stage (then `frac` is 1). Pure.
+ * @param {PolarityConfig} cfg
+ * @param {number} score
+ * @returns {{index:number,name:string,tint:string,next:?string,nextAt:?number,into:number,span:number,frac:number,isLast:boolean}}
+ */
+export function stageProgress(cfg, score) {
+  const list = cfg.STAGES;
+  const index = stageIndexAt(cfg, score);
+  const cur = list[index];
+  const next = list[index + 1] || null;
+  const into = score - cur.at;
+  const span = next ? next.at - cur.at : 0;
+  const frac = next ? Math.max(0, Math.min(1, into / span)) : 1;
+  return {
+    index, name: cur.name, tint: cur.tint,
+    next: next ? next.name : null, nextAt: next ? next.at : null,
+    into, span, frac, isLast: !next,
+  };
+}
+
+/**
+ * A finished run distilled to plain data for the meta layer. The shell builds this from
+ * the final GameState; the pure fns below consume it.
+ * @typedef {{score:number, stageIndex:number, clutch:number}} RunSummary
+ */
+
+/**
+ * Persistent cross-run save (Growth Architecture Layer 2). Plain JSON — safe to store.
+ * @typedef {Object} Meta
+ * @property {number} v          schema version
+ * @property {number} plays      lifetime runs finished
+ * @property {number} best       best single-run score (mirrors legacy `polarity.best`)
+ * @property {number} bestStage  furthest stage index ever reached
+ * @property {{gates:number, clutch:number}} totals lifetime cumulative counters
+ * @property {Object<string,boolean>} achieved achievement ids earned
+ */
+
+/**
+ * Normalise any prior meta (including a legacy blob that had only a best score, or
+ * nothing at all) into a complete, current-schema Meta. Pure; never mutates the input.
+ * @param {Partial<Meta>} [m]
+ * @param {number} [legacyBest=0] a best score recovered from the old `polarity.best` key
+ * @returns {Meta}
+ */
+export function normalizeMeta(m, legacyBest = 0) {
+  const src = m && typeof m === 'object' ? m : {};
+  const totals = src.totals && typeof src.totals === 'object' ? src.totals : {};
+  return {
+    v: 1,
+    plays: src.plays | 0,
+    best: Math.max(src.best | 0, legacyBest | 0),
+    bestStage: src.bestStage | 0,
+    totals: { gates: totals.gates | 0, clutch: totals.clutch | 0 },
+    achieved: src.achieved && typeof src.achieved === 'object' ? { ...src.achieved } : {},
+  };
+}
+
+/**
+ * Pure reducer: fold a finished run into the meta. Returns a NEW Meta — increments
+ * lifetime counters, raises best/bestStage monotonically, and flips any newly-earned
+ * achievement ids on. Idempotent for achievements (re-earning is a no-op). No IO.
+ * @param {Partial<Meta>} meta prior meta (any shape; normalised internally)
+ * @param {RunSummary} summary the run that just ended
+ * @param {PolarityConfig} [cfg=CONFIG]
+ * @returns {Meta} the new meta
+ */
+export function applyRun(meta, summary, cfg = CONFIG) {
+  const next = normalizeMeta(meta);
+  next.plays += 1;
+  next.totals.gates += summary.score | 0;
+  next.totals.clutch += summary.clutch | 0;
+  next.best = Math.max(next.best, summary.score | 0);
+  next.bestStage = Math.max(next.bestStage, summary.stageIndex | 0);
+  for (const a of ACHIEVEMENTS) {
+    if (!next.achieved[a.id] && a.test(summary, next)) next.achieved[a.id] = true;
+  }
+  return next;
+}
+
+/**
+ * Achievement ids present in `nextMeta` but not `prevMeta` — the ones just earned, in
+ * ACHIEVEMENTS order, as {id,label,desc}. Pure; for the shell to toast on game over.
+ * @param {Partial<Meta>} prevMeta
+ * @param {Partial<Meta>} nextMeta
+ * @returns {Array<{id:string,label:string,desc:string}>}
+ */
+export function newlyEarned(prevMeta, nextMeta) {
+  const before = (prevMeta && prevMeta.achieved) || {};
+  const after = (nextMeta && nextMeta.achieved) || {};
+  const out = [];
+  for (const a of ACHIEVEMENTS) {
+    if (after[a.id] && !before[a.id]) out.push({ id: a.id, label: a.label, desc: a.desc });
+  }
+  return out;
 }

@@ -17,6 +17,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CONFIG, createGame, reset, start, toggle, speedOf, spawnGate, tick, milestoneAt, isClutch,
+  ACHIEVEMENTS, stageIndexAt, stageAt, stageProgress, normalizeMeta, applyRun, newlyEarned,
 } from './polarity.core.js';
 
 /** Deterministic RNG (mulberry32) so gate polarities are reproducible. */
@@ -290,4 +291,121 @@ test('start()/reset() clears the clutch tally and the flip timestamp', () => {
   start(g);
   assert.equal(g.clutch, 0);
   assert.equal(isClutch(g), false);
+});
+
+// ── 10. Stages (in-run arc — Growth Architecture Layer 1) ───────────────────────
+test('STAGES is a well-formed, strictly-ascending table starting at 0', () => {
+  assert.ok(CONFIG.STAGES.length >= 4);
+  assert.equal(CONFIG.STAGES[0].at, 0, 'first stage begins at score 0');
+  let prev = -1;
+  for (const s of CONFIG.STAGES) {
+    assert.equal(typeof s.name, 'string'); assert.ok(s.name.length > 0);
+    assert.equal(typeof s.tint, 'string');
+    assert.ok(s.at > prev, 'stage thresholds strictly ascending');
+    prev = s.at;
+  }
+});
+
+test('stageIndexAt is 0 at score 0, steps up exactly at each boundary, and clamps', () => {
+  assert.equal(stageIndexAt(CONFIG, 0), 0);
+  for (let i = 1; i < CONFIG.STAGES.length; i++) {
+    const at = CONFIG.STAGES[i].at;
+    assert.equal(stageIndexAt(CONFIG, at - 1), i - 1, `just below boundary ${at} → stage ${i - 1}`);
+    assert.equal(stageIndexAt(CONFIG, at), i, `at boundary ${at} → stage ${i}`);
+  }
+  assert.equal(stageIndexAt(CONFIG, 1e9), CONFIG.STAGES.length - 1, 'clamps to the last stage');
+  assert.equal(stageAt(CONFIG, 0).name, CONFIG.STAGES[0].name);
+});
+
+test('stageProgress: frac is 0 at a boundary, rises toward the next, isLast only at the top', () => {
+  const p0 = stageProgress(CONFIG, 0);
+  assert.equal(p0.index, 0);
+  assert.equal(p0.frac, 0);
+  assert.equal(p0.isLast, false);
+  assert.equal(p0.next, CONFIG.STAGES[1].name);
+
+  // midway between stage 0 and stage 1
+  const mid = Math.floor(CONFIG.STAGES[1].at / 2);
+  const pm = stageProgress(CONFIG, mid);
+  assert.ok(pm.frac > 0 && pm.frac < 1);
+
+  const top = stageProgress(CONFIG, 1e9);
+  assert.equal(top.index, CONFIG.STAGES.length - 1);
+  assert.equal(top.isLast, true);
+  assert.equal(top.frac, 1);
+  assert.equal(top.next, null);
+});
+
+// ── 11. Meta-progression (account arc — Growth Architecture Layer 2) ─────────────
+const summary = (score, stageIndex = 0, clutch = 0) => ({ score, stageIndex, clutch });
+
+test('normalizeMeta fills a complete v1 blob from nothing, and recovers a legacy best', () => {
+  const m = normalizeMeta(undefined, 42);
+  assert.equal(m.v, 1);
+  assert.equal(m.plays, 0);
+  assert.equal(m.best, 42, 'legacy best is carried in');
+  assert.equal(m.bestStage, 0);
+  assert.deepEqual(m.totals, { gates: 0, clutch: 0 });
+  assert.deepEqual(m.achieved, {});
+});
+
+test('applyRun increments plays and totals and raises best/bestStage monotonically', () => {
+  let m = normalizeMeta();
+  m = applyRun(m, summary(30, 1, 2));
+  assert.equal(m.plays, 1);
+  assert.equal(m.totals.gates, 30);
+  assert.equal(m.totals.clutch, 2);
+  assert.equal(m.best, 30);
+  assert.equal(m.bestStage, 1);
+  // a weaker run never lowers best/bestStage but still accumulates totals + plays
+  m = applyRun(m, summary(10, 0, 0));
+  assert.equal(m.plays, 2);
+  assert.equal(m.totals.gates, 40);
+  assert.equal(m.best, 30, 'best never decreases');
+  assert.equal(m.bestStage, 1, 'bestStage never decreases');
+});
+
+test('applyRun does not mutate the input meta (pure reducer)', () => {
+  const m0 = normalizeMeta();
+  const m1 = applyRun(m0, summary(50, 2, 0));
+  assert.equal(m0.plays, 0, 'original untouched');
+  assert.equal(m1.plays, 1);
+  assert.notEqual(m0, m1);
+});
+
+test('achievements fire exactly when earned and are recorded idempotently', () => {
+  let m = normalizeMeta();
+  // First finished run → the "first-run" badge; score 50 clean → "clean-50".
+  m = applyRun(m, summary(50, 2, 0));
+  assert.equal(m.achieved['first-run'], true);
+  assert.equal(m.achieved['clean-50'], true);
+  assert.equal(m.achieved['reach-riptide'], true, 'stageIndex 2 reaches Riptide');
+  assert.equal(m.achieved['century'], undefined, 'not yet 100 in a run');
+  // Re-running the same shape does not corrupt or double anything.
+  const before = JSON.stringify(m.achieved);
+  m = applyRun(m, summary(5, 0, 0));
+  assert.equal(JSON.stringify(m.achieved), before, 'no achievements lost or duplicated');
+});
+
+test('cumulative achievement (lifetime 1,000 gates) only unlocks once the total crosses', () => {
+  let m = normalizeMeta();
+  for (let i = 0; i < 9; i++) m = applyRun(m, summary(100, 3, 0)); // 900 all-time
+  assert.equal(m.achieved['lifetime-1k'], undefined, 'still under 1,000');
+  m = applyRun(m, summary(100, 3, 0)); // 1,000
+  assert.equal(m.achieved['lifetime-1k'], true);
+});
+
+test('newlyEarned reports only the ids gained between two metas, in table order', () => {
+  const prev = normalizeMeta();
+  const next = applyRun(prev, summary(120, 3, 3));
+  const gained = newlyEarned(prev, next).map(a => a.id);
+  assert.ok(gained.includes('first-run'));
+  assert.ok(gained.includes('event-horizon'));
+  assert.ok(gained.includes('century'));
+  assert.ok(gained.includes('clutch-3'));
+  // ordering matches ACHIEVEMENTS
+  const order = ACHIEVEMENTS.map(a => a.id).filter(id => gained.includes(id));
+  assert.deepEqual(gained, order);
+  // nothing new when nothing changed
+  assert.deepEqual(newlyEarned(next, next), []);
 });
