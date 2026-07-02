@@ -9,6 +9,24 @@ slab entirely and it topples. The slab slides faster the higher you build.
 **Controls:** click, tap, or press **Space** (or ↓) to drop. Same control starts and
 restarts. Your best height is saved locally in `localStorage`.
 
+## How it grows
+
+Skyline follows the shared **Growth Architecture**
+(`notes/reference/growth-architecture.md`):
+
+- **Core-fun (streak bonus).** On top of the flush-drop bonus and the score-scaled
+  slide speed, a **run of flush drops now pays an escalating bonus** (`STREAK_BONUS_MAX`):
+  the 2nd flush in a row adds +1, the 3rd +2 … so chaining perfects is where the big
+  towers come from — the precision skill is directly, super-linearly rewarded.
+- **Stages (the run's arc).** Foundation → Mid-rise → High-rise → Spire — a quiet HUD
+  chip + progress bar, a stage-tinted sky wash, and a shockwave on stage change
+  (`STAGES`, `stageIndexAt`, `stageProgress`, pure + tested).
+- **Meta-progression (across runs).** A persistent `skyline.meta` blob tracks lifetime
+  floors, perfects, furthest stage, best streak, and **badges** (first run,
+  High-rise/Spire, a 5-flush streak, 25 perfects in a run, a century, 1,000 all-time
+  floors, 25 runs). Game-over run report + account line. Skill-safe: badges, never
+  power. Legacy `skyline.best` preserved.
+
 ## How it's built
 
 ```

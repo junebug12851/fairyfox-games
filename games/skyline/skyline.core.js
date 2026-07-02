@@ -42,6 +42,8 @@ export const CONFIG = Object.freeze({
   SPEED_MAX: 9.5,     // slide speed cap (px/tick)
   PERFECT_EPS: 3.5,   // |offset| at or below this counts as a perfect drop (px)
   PERFECT_BONUS: 1,   // extra points a perfect drop pays (on top of the base +1)
+  STREAK_BONUS_MAX: 4,// a run of perfects pays escalating extra — the greed/skill reward:
+                      // the 2nd perfect in a row adds +1, the 3rd +2 … capped here
   // Height milestones: a label flashes the instant the score first reaches each
   // threshold. Ascending. Pure feedback — the shell reads these; the simulation
   // never branches on them.
@@ -53,7 +55,38 @@ export const CONFIG = Object.freeze({
     Object.freeze({ score: 100, label: 'Into orbit' }),
     Object.freeze({ score: 150, label: 'Escape velocity' }),
   ]),
+  // Stages — the readable arc of a run (Growth Architecture Layer 1), keyed on score.
+  STAGES: Object.freeze([
+    Object.freeze({ at: 0,   name: 'Foundation', tint: '#8ab4ff' }),
+    Object.freeze({ at: 20,  name: 'Mid-rise',   tint: '#6ad0d0' }),
+    Object.freeze({ at: 60,  name: 'High-rise',  tint: '#a98cff' }),
+    Object.freeze({ at: 120, name: 'Spire',      tint: '#ff8f6a' }),
+  ]),
 });
+
+/**
+ * Achievement definitions — plain data (Growth Architecture Layer 2). Pure predicates.
+ * @typedef {{id:string,label:string,desc:string,test:(s:RunSummary,m:Meta)=>boolean}} Achievement
+ * @type {ReadonlyArray<Achievement>}
+ */
+export const ACHIEVEMENTS = Object.freeze([
+  Object.freeze({ id: 'first-run',    label: 'Groundbreaking',desc: 'Finish a run.',
+    test: (s, m) => m.plays >= 1 }),
+  Object.freeze({ id: 'reach-high',   label: 'High-rise',     desc: 'Reach the High-rise stage.',
+    test: (s) => s.stageIndex >= 2 }),
+  Object.freeze({ id: 'reach-spire',  label: 'Spire',         desc: 'Reach the Spire stage.',
+    test: (s) => s.stageIndex >= 3 }),
+  Object.freeze({ id: 'streak-5',     label: 'Flush five',    desc: 'Five perfect drops in a row.',
+    test: (s) => s.bestStreak >= 5 }),
+  Object.freeze({ id: 'perfect-25',   label: 'Perfectionist', desc: '25 perfect drops in a run.',
+    test: (s) => s.perfects >= 25 }),
+  Object.freeze({ id: 'century',      label: 'Into orbit',    desc: 'Score 100 in a run.',
+    test: (s) => s.score >= 100 }),
+  Object.freeze({ id: 'lifetime-1k',  label: 'Thousand floors',desc: 'Stack 1,000 floors all-time.',
+    test: (s, m) => m.totals.floors >= 1000 }),
+  Object.freeze({ id: 'regular',      label: 'Regular',       desc: 'Finish 25 runs.',
+    test: (s, m) => m.plays >= 25 }),
+]);
 
 /**
  * A placed slab, in world coordinates. `x` is the left edge.
@@ -226,7 +259,10 @@ export function drop(g) {
     g.perfects++;
     g.streak++;
     if (g.streak > g.bestStreak) g.bestStreak = g.streak;
-    g.score += 1 + g.cfg.PERFECT_BONUS;
+    // Escalating streak reward — the 1st perfect adds nothing extra, the 2nd +1, the
+    // 3rd +2 … capped. Chaining perfects is where the big scores come from.
+    const streakBonus = Math.min(g.cfg.STREAK_BONUS_MAX, Math.max(0, g.streak - 1));
+    g.score += 1 + g.cfg.PERFECT_BONUS + streakBonus;
   } else {
     g.blocks.push({ x: left, width: overlap });
     g.streak = 0;
@@ -273,4 +309,129 @@ export function tick(g) {
   g.t++;
   moveCurrent(g);
   return { died: false };
+}
+
+// ── Stages (in-run arc — Growth Architecture Layer 1) ────────────────────────────
+
+/**
+ * Index of the current stage for a score — the highest STAGES entry reached. Clamps to
+ * the last stage. Pure.
+ * @param {SkylineConfig} cfg
+ * @param {number} score
+ * @returns {number}
+ */
+export function stageIndexAt(cfg, score) {
+  const s = (cfg && cfg.STAGES) || [];
+  let i = 0;
+  for (let k = 0; k < s.length; k++) if (score >= s[k].at) i = k;
+  return i;
+}
+
+/**
+ * The current stage object for a score. Pure.
+ * @param {SkylineConfig} cfg
+ * @param {number} score
+ * @returns {{at:number,name:string,tint:string}}
+ */
+export function stageAt(cfg, score) {
+  return cfg.STAGES[stageIndexAt(cfg, score)];
+}
+
+/**
+ * Progress through the current stage toward the next — drives the HUD stage chip. Pure.
+ * @param {SkylineConfig} cfg
+ * @param {number} score
+ * @returns {{index:number,name:string,tint:string,next:?string,nextAt:?number,into:number,span:number,frac:number,isLast:boolean}}
+ */
+export function stageProgress(cfg, score) {
+  const list = cfg.STAGES;
+  const index = stageIndexAt(cfg, score);
+  const cur = list[index];
+  const next = list[index + 1] || null;
+  const into = score - cur.at;
+  const span = next ? next.at - cur.at : 0;
+  const frac = next ? Math.max(0, Math.min(1, into / span)) : 1;
+  return {
+    index, name: cur.name, tint: cur.tint,
+    next: next ? next.name : null, nextAt: next ? next.at : null,
+    into, span, frac, isLast: !next,
+  };
+}
+
+// ── Meta-progression (account arc — Growth Architecture Layer 2) ──────────────────
+
+/**
+ * A finished run distilled to plain data for the meta layer.
+ * @typedef {{score:number, stageIndex:number, placed:number, perfects:number, bestStreak:number}} RunSummary
+ */
+
+/**
+ * Persistent cross-run save. Plain JSON.
+ * @typedef {Object} Meta
+ * @property {number} v
+ * @property {number} plays
+ * @property {number} best        best single-run score (mirrors `skyline.best`)
+ * @property {number} bestStage
+ * @property {number} bestStreak  longest perfect streak ever
+ * @property {{floors:number, perfects:number, points:number}} totals
+ * @property {Object<string,boolean>} achieved
+ */
+
+/**
+ * Normalise any prior meta (legacy best-only, or nothing) into a complete Meta. Pure.
+ * @param {Partial<Meta>} [m]
+ * @param {number} [legacyBest=0]
+ * @returns {Meta}
+ */
+export function normalizeMeta(m, legacyBest = 0) {
+  const src = m && typeof m === 'object' ? m : {};
+  const t = src.totals && typeof src.totals === 'object' ? src.totals : {};
+  return {
+    v: 1,
+    plays: src.plays | 0,
+    best: Math.max(src.best | 0, legacyBest | 0),
+    bestStage: src.bestStage | 0,
+    bestStreak: src.bestStreak | 0,
+    totals: { floors: t.floors | 0, perfects: t.perfects | 0, points: t.points | 0 },
+    achieved: src.achieved && typeof src.achieved === 'object' ? { ...src.achieved } : {},
+  };
+}
+
+/**
+ * Pure reducer: fold a finished run into the meta. Returns a NEW Meta. No IO.
+ * @param {Partial<Meta>} meta
+ * @param {RunSummary} summary
+ * @param {SkylineConfig} [cfg=CONFIG]
+ * @returns {Meta}
+ */
+export function applyRun(meta, summary, cfg = CONFIG) {
+  const next = normalizeMeta(meta);
+  next.plays += 1;
+  next.totals.floors += summary.placed | 0;
+  next.totals.perfects += summary.perfects | 0;
+  next.totals.points += summary.score | 0;
+  next.best = Math.max(next.best, summary.score | 0);
+  next.bestStage = Math.max(next.bestStage, summary.stageIndex | 0);
+  next.bestStreak = Math.max(next.bestStreak, summary.bestStreak | 0);
+  for (const a of ACHIEVEMENTS) {
+    if (!next.achieved[a.id] && a.test(summary, next, cfg)) next.achieved[a.id] = true;
+  }
+  return next;
+}
+
+/**
+ * Achievement ids present in `nextMeta` but not `prevMeta` — freshly earned, in table
+ * order, as {id,label,desc}. Pure.
+ * @param {Partial<Meta>} prevMeta
+ * @param {Partial<Meta>} nextMeta
+ * @returns {Array<{id:string,label:string,desc:string}>}
+ */
+export function newlyEarned(prevMeta, nextMeta) {
+  const before = (prevMeta && prevMeta.achieved) || {};
+  const after = (nextMeta && nextMeta.achieved) || {};
+  const out = [];
+  for (const a of ACHIEVEMENTS) {
+    if (after[a.id] && !before[a.id]) out.push({ id: a.id, label: a.label, desc: a.desc });
+  }
+  return out;
 }

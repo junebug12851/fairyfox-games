@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import {
   CONFIG, createGame, reset, start, topBlock, speedOf, spawnCurrent,
   moveCurrent, drop, tick, milestoneBetween,
+  ACHIEVEMENTS, stageIndexAt, stageAt, stageProgress, normalizeMeta, applyRun, newlyEarned,
 } from './skyline.core.js';
 
 /** Deterministic RNG (mulberry32) so spawns are reproducible. */
@@ -253,4 +254,94 @@ test('drop() and tick() are inert before start and after death', () => {
   dead.phase = 'dead';
   assert.deepEqual(drop(dead), { placed: false, died: false, perfect: false, sliced: 0 });
   assert.deepEqual(tick(dead), { died: false });
+});
+
+// ── 7. Streak bonus (core-fun) ─────────────────────────────────────────────────
+test('a perfect streak pays an escalating bonus (1st adds 0, 2nd +1, 3rd +2, capped)', () => {
+  const g = newGame(); start(g);
+  const gains = [];
+  for (let i = 0; i < CONFIG.STREAK_BONUS_MAX + 3; i++) {
+    const prev = topBlock(g);
+    const before = g.score;
+    g.current = { x: prev.x, width: prev.width, dir: 1 }; // exactly flush → perfect
+    drop(g);
+    gains.push(g.score - before);
+  }
+  const base = 1 + CONFIG.PERFECT_BONUS;
+  assert.equal(gains[0], base, 'first perfect: no streak bonus');
+  assert.equal(gains[1], base + 1, 'second: +1');
+  assert.equal(gains[2], base + 2, 'third: +2');
+  assert.equal(gains[gains.length - 1], base + CONFIG.STREAK_BONUS_MAX, 'bonus caps');
+});
+
+// ── 8. Stages ──────────────────────────────────────────────────────────────────
+test('STAGES is well-formed and stageIndexAt steps at each boundary + clamps', () => {
+  assert.ok(CONFIG.STAGES.length >= 4);
+  assert.equal(CONFIG.STAGES[0].at, 0);
+  assert.equal(stageIndexAt(CONFIG, 0), 0);
+  for (let i = 1; i < CONFIG.STAGES.length; i++) {
+    const at = CONFIG.STAGES[i].at;
+    assert.equal(stageIndexAt(CONFIG, at - 1), i - 1);
+    assert.equal(stageIndexAt(CONFIG, at), i);
+  }
+  assert.equal(stageIndexAt(CONFIG, 1e9), CONFIG.STAGES.length - 1);
+  assert.equal(stageAt(CONFIG, 0).name, CONFIG.STAGES[0].name);
+});
+
+test('stageProgress: frac 0 at a boundary, isLast at the top', () => {
+  const p0 = stageProgress(CONFIG, 0);
+  assert.equal(p0.frac, 0); assert.equal(p0.isLast, false); assert.equal(p0.next, CONFIG.STAGES[1].name);
+  const top = stageProgress(CONFIG, 1e9);
+  assert.equal(top.isLast, true); assert.equal(top.frac, 1); assert.equal(top.next, null);
+});
+
+// ── 9. Meta-progression ────────────────────────────────────────────────────────
+const summary = (o = {}) => ({ score: 0, stageIndex: 0, placed: 0, perfects: 0, bestStreak: 0, ...o });
+
+test('normalizeMeta fills a complete v1 blob and recovers a legacy best', () => {
+  const m = normalizeMeta(undefined, 22);
+  assert.equal(m.v, 1);
+  assert.equal(m.best, 22);
+  assert.deepEqual(m.totals, { floors: 0, perfects: 0, points: 0 });
+});
+
+test('applyRun accumulates totals and raises bests monotonically; pure', () => {
+  const m0 = normalizeMeta();
+  const m1 = applyRun(m0, summary({ score: 70, stageIndex: 2, placed: 40, perfects: 12, bestStreak: 6 }));
+  assert.equal(m0.plays, 0, 'input untouched');
+  assert.equal(m1.plays, 1);
+  assert.equal(m1.totals.floors, 40);
+  assert.equal(m1.best, 70);
+  assert.equal(m1.bestStage, 2);
+  assert.equal(m1.bestStreak, 6);
+  const m2 = applyRun(m1, summary({ score: 10, stageIndex: 0, placed: 5, bestStreak: 1 }));
+  assert.equal(m2.best, 70, 'best never drops');
+  assert.equal(m2.bestStreak, 6, 'bestStreak never drops');
+  assert.equal(m2.totals.floors, 45);
+});
+
+test('achievements fire when earned, idempotent, cumulative waits to cross', () => {
+  let m = normalizeMeta();
+  m = applyRun(m, summary({ score: 100, stageIndex: 3, placed: 60, perfects: 25, bestStreak: 5 }));
+  assert.equal(m.achieved['first-run'], true);
+  assert.equal(m.achieved['reach-spire'], true);
+  assert.equal(m.achieved['streak-5'], true);
+  assert.equal(m.achieved['perfect-25'], true);
+  assert.equal(m.achieved['century'], true);
+  assert.equal(m.achieved['lifetime-1k'], undefined);
+  const snap = JSON.stringify(m.achieved);
+  m = applyRun(m, summary({ score: 3, placed: 2 }));
+  assert.equal(JSON.stringify(m.achieved), snap, 'nothing lost/duplicated');
+});
+
+test('newlyEarned reports only ids gained between two metas, in table order', () => {
+  const prev = normalizeMeta();
+  const next = applyRun(prev, summary({ score: 100, stageIndex: 2, placed: 60, perfects: 25, bestStreak: 5 }));
+  const gained = newlyEarned(prev, next).map(a => a.id);
+  assert.ok(gained.includes('first-run'));
+  assert.ok(gained.includes('reach-high'));
+  assert.ok(gained.includes('century'));
+  const order = ACHIEVEMENTS.map(a => a.id).filter(id => gained.includes(id));
+  assert.deepEqual(gained, order);
+  assert.deepEqual(newlyEarned(next, next), []);
 });

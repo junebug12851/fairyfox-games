@@ -53,15 +53,18 @@ and Netlify at **`games.fairyfox.io`** (landing page), plus each game at
   **meta-progression** (`ricochet.meta`: lifetime hits/biggest bank + 8 badges,
   run-report) — legacy best preserved. Pure core (`computeShot`) + 30 tests.
 - **Skyline** (`games/skyline/`) — drop a sliding slab onto your tower; the overhang is
-  sliced off so only precision keeps it climbing. **Flush drops** keep full width + pay
-  double; **perfects/best-streak** on game over; milestones to 150. Pure core (no
-  timer-driven death) + 18 tests.
+  sliced off so only precision keeps it climbing. **On the Growth Architecture**: flush
+  drops keep full width + pay double, and a **run of flush drops pays an escalating
+  bonus** (chaining perfects = big towers); a **stage arc** (Foundation → Mid-rise →
+  High-rise → Spire) with HUD chip + tinted sky, and **meta-progression** (`skyline.meta`:
+  lifetime floors/perfects/best-streak + 8 badges, run-report) — legacy best preserved.
+  Pure core (no timer-driven death) + 25 tests.
 - **Loft** (`games/loft/`) — keep the glowing orbs aloft; tap a **falling** orb to bat
   it up (only descending orbs can be struck — a rhythm, not a mash). Every few points
   another orb joins the air, up to six; a dropped orb ends it. **Progression ranks** +
   a **self-play winnability** test. Pure core + 24 tests.
 
-**Tests:** 203/203 green across the collection.
+**Tests:** 210/210 green across the collection.
 
 ## In flight / awaiting
 
@@ -90,7 +93,7 @@ and Netlify at **`games.fairyfox.io`** (landing page), plus each game at
 | Area | Status |
 |------|--------|
 | Repo + branches (dev/main) | ✅ |
-| Tests (`node --test`) | ✅ 203/203 across 7 games |
+| Tests (`node --test`) | ✅ 210/210 across 7 games |
 | CI (node --test) | ✅ Workflow in place |
 | GitHub Pages (`fairyfox.io/fairyfox-games/`) | ✅ Deploys on push to `main` |
 | Netlify (`games.fairyfox.io`) | ✅ Live over HTTPS |
