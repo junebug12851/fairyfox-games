@@ -114,9 +114,12 @@ After making changes, run this loop **without being asked**:
    **changelog entry rides inside the commit** (top of `notes/version/YYYY-MM.md`, no
    hash marker), and **bump `VERSION`** in the same commit when warranted (PATCH
    default, MINOR milestone — e.g. a new game, never MAJOR).
-3. **Get Fairy Fox's explicit approval before releasing to `main`** — the release deploys
-   (GitHub Pages), so don't auto-release even on green; commit/push to `dev` freely, then
-   stop and ask before the ship. When approved, **release `dev → main` the git-flow way** —
+3. **Release `dev → main` by DEFAULT once the full suite is green** (Fairy Fox: "release by
+   default if all tests pass" — this reverses the old approve-before-ship gate). The release
+   deploys (GitHub Pages), so only **hold** when something is off: tests fail or can't
+   complete, a UI preview looks broken, or the change is genuinely risky/ambiguous — then
+   commit WIP to `dev` and report the blocker instead. Otherwise **release `dev → main` the
+   git-flow way** —
    `main` advances only by a `--no-ff`, **tagged** merge, never a fast-forward or a direct
    commit. **`main` is branch-protected** (supply-chain-hardening), so the release goes
    through a **PR**:
