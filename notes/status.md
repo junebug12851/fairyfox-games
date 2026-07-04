@@ -2,7 +2,7 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.13.0` (single source of truth: repo-root `VERSION`).
+**Version:** `0.13.1` (single source of truth: repo-root `VERSION`).
 
 ## Current state (read this first)
 
@@ -88,16 +88,17 @@ sole host), plus each game at `…/games/<game>/`.
 
 ## In flight / awaiting
 
-- **v0.13.0 (2026-07-04) queued on `dev`:** a new ninth game **Symmetry**
-  (mirror-coordination — one control, two mirrored catchers, forced tradeoffs + twin
-  bonuses) and a **Poise** grow (near-miss line). **Awaiting Fairy Fox's release call to
-  `main`.**
+- **Released v0.13.0 (2026-07-04) → `main`:** the whole queued arc (v0.12.0 Poise +
+  v0.13.0 Symmetry, plus the earlier v0.10.x/0.11.0 work) is now shipped and live; GitHub
+  Pages redeployed, homepage shows **Games 9**. **Release policy changed:** ship `dev →
+  main` **by default when tests are green** (no longer hold for per-release approval) —
+  see `CLAUDE.md` step 3.
 - **Growth Architecture — rolled out to all 7 games (v0.11.0).** Every game now has a
   **core-fun pass** (its own tension hook) **plus** the full three layers: readable
   **stages** (HUD chip + field tint + stage beat), persistent **meta-progression**
   (`<slug>.meta`, skill-safe **badges**, run-report + account line, legacy `<slug>.best`
   preserved), and **feel/HUD** depth. All logic pure + tested; each previewed in Chrome.
-  **On `dev` — awaiting Fairy Fox's release call to `main`.**
+  **Shipped to `main` in v0.13.0.**
 - **Landing page** orders game cards by most-recently-updated with an "Updated <date>"
   line on each (v0.10.3).
 - **Daily cadence — automated.** The 1am `fairyfox-games-daily` task ships a new unique
@@ -108,8 +109,8 @@ sole host), plus each game at `…/games/<game>/`.
 
 ## Next
 
-- **Release `dev → main` once Fairy Fox approves** (the whole v0.10.x/0.11.0 arc is
-  queued on `dev`). Then keep deepening per `plans/growth-roadmap.md` — Wave 2/3 ideas
+- **Ship each green run `dev → main` by default** (new policy — no approval wait; only
+  hold on red/broken/risky). Keep deepening per `plans/growth-roadmap.md` — Wave 2/3 ideas
   (cosmetic unlocks, skill-safe modes, daily seeds) one game per few daily runs.
 - Keep each addition through the simple-but-deep checklist — never convoluted (the hard
   constraint). Keep inventing fresh, mechanically-distinct experiments.
