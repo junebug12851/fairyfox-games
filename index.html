@@ -49,18 +49,9 @@ permalink: /
            Add or update a game by editing its _games/<slug>.md front matter. -->
       {% assign games = site.games | sort: "updated" | reverse %}
       <div class="grid cols-3" id="game-grid">
-        {% for g in games %}
-        <a class="card game-card proj-card" href="{{ g.slug | prepend: '/games/' | append: '/' | relative_url }}" data-updated="{{ g.updated | date: '%Y-%m-%d' }}" data-tags="{{ g.tags | join: ' ' }}">
-          <div class="card-head">
-            <img class="game-icon" src="{{ g.slug | prepend: '/games/' | append: '/icon.png' | relative_url }}" alt="" width="56" height="56" loading="lazy">
-            <h3>{{ g.title }}</h3>
-          </div>
-          <div class="tags">{% for t in g.tags %}<span class="tag">{{ t }}</span>{% endfor %}</div>
-          <p class="blurb">{{ g.tagline }}</p>
-          <span class="play">▶ Play</span>
-        </a>
-        {% endfor %}
+        {% for g in games %}{% include game-card.html game=g %}{% endfor %}
       </div>
+      <div class="recent-more"><a href="{{ '/tags/' | relative_url }}">Browse by mechanic →</a></div>
     </div>
   </section>
 </main>
