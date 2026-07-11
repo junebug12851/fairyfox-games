@@ -2,10 +2,12 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.20.3` (single source of truth: repo-root `VERSION`). **v0.20.3** is a **GROW** run:
-**Ricochet** comes onto **varied structure + progression** (the 8th game on the pattern) — its flat
-random target sprinkle is now a seeded sequence of named **layouts** (Scatter · Rack · Gallery ·
-Ladder · Pockets · The Gauntlet) that unlock as you climb the stages. **v0.20.2** was a
+**Version:** `0.21.0` (single source of truth: repo-root `VERSION`). **v0.21.0** is a **PLANT** run:
+a new game, **Tether** — a genuinely new verb (**swing/grapple**), the collection's first pendulum
+and its **12th game**. Hold to rope onto an anchor and swing, let go to fly; *when* you release is
+everything. **v0.20.3** was a **GROW** run: **Ricochet** onto **varied structure + progression**
+(the 8th game on the pattern) — its flat random target sprinkle is now a seeded sequence of named
+**layouts** (Scatter · Rack · Gallery · Ladder · Pockets · The Gauntlet). **v0.20.2** was a
 **site-chrome correction**: each **game card's** description moved into a corner **"?"** and the card
 category tags got restyled. **v0.20.0** was a **milestone**: a new **"depth inside the mechanic"**
 layer, with **Polarity as the reference build** — built from owner feedback that the games go
@@ -31,8 +33,28 @@ progression) and logs a player-facing changelog entry. Public copy = "AI-managed
 **Live:** static, published by **GitHub Pages** at `fairyfox.io/fairyfox-games/` (the
 sole host), plus each game at `…/games/<game>/`.
 
-**Games so far (11):**
+**Games so far (12):**
 
+- **Tether** (`games/tether/`) — a **swing/grapple** runner (the collection's first pendulum, and a
+  genuinely new verb): anchors hang ahead across an endless sky; **hold** to rope onto one and swing
+  beneath it, **release** to fly, miss the next and you fall past the floor. One control.
+  **The hook falls out of the physics rather than being bolted on:** exit velocity is the swing's
+  *tangential* velocity, so the **release angle is the launch angle** — letting go is a pure
+  projectile trade-off (near the bottom = fast but **flat**, into the ground; near the top = high but
+  **stalled**). The ~45° sweet spot is the **whip**: it grows the multiplier (×2…×9) **and boosts the
+  launch**, so it isn't a scoreboard — it's the distance that clears the next gap. *Skill and survival
+  are the same act.* Holding **pumps** the swing higher (wind up, then let go).
+  **On Varied Structure + the Growth Architecture from birth:** a run is a seeded **sequence of named
+  anchor-lines** (Steady · Rise · Stagger · The Chasm · Canopy · The Gauntlet) `minStage`-gated so
+  climbing the stages **opens the pool** (notable ones flash a name cue) — `FORMATIONS`/
+  `pickFormation`/`loadFormation`, `spawnAnchor` pulls each anchor from a per-formation queue of
+  `{dx,y}` specs. Plus a **stage arc** (Sway → Momentum → Airborne → Freeflight → Skybreak) with HUD
+  chip + tint, a **gap asymptote** (×1 → ×1.40 — never plateaus), and **meta-progression**
+  (`tether.meta`: lifetime anchors/points/whips/snaps + 13 badges, run-report + near-miss) — legacy
+  `tether.best` preserved. **Depth inside the one verb:** a hidden **snap** sub-window straddling the
+  true optimum (the whip arc *is* drawn on screen; the snap window inside it deliberately is **not**),
+  **Slipstream** (a snap streak → a timed double-score window), and a **secret Zenith stage**.
+  Pure core + 32 tests. **(9th game on varied structure — ships on the pattern from day one.)**
 - **Ink Bloom** (`games/ink-bloom/`) — steer a growing line, eat motes, don't cross
   your trail. **On Varied Structure + Growth**: each run is a seeded **sequence of mote
   spawn patterns** (Scatter · Drift · Vine · Ring · Thicket · Spectrum) that **unlock as you
@@ -157,7 +179,7 @@ sole host), plus each game at `…/games/<game>/`.
   `sluice.best` preserved. Pure core + 35 tests. **(4th game on varied structure — ships on
   the pattern from day one.)**
 
-**Tests:** **403/403** green, released. ⚠ **Local gotcha:** the bare `node --test` from repo root now
+**Tests:** **435/435** green, released (Tether adds 32). ⚠ **Local gotcha:** the bare `node --test` from repo root now
 also walks the git-ignored `assets/references/` hub clone, whose unrelated tests fail (missing deps) —
 scope the run to `node --test "games/**/*.test.js"`. CI never checks out `assets/references/` (it's
 git-ignored), so CI's `node --test` sees only the game tests and is green.
@@ -392,8 +414,8 @@ git-ignored), so CI's `node --test` sees only the game tests and is green.
 
 | Area | Status |
 |------|--------|
-| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.20.3 release (tagged); working tree carries only the fresh session notes |
-| Tests (`node --test`) | ✅ **403/403** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
+| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.21.0 release (tagged); working tree carries only the fresh session notes |
+| Tests (`node --test`) | ✅ **435/435** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
 | CI (node --test) | ✅ Workflow in place |
 | GitHub Pages (`fairyfox.io/fairyfox-games/`) | ✅ Sole host — deploys on push to `main` |
 | Netlify | ⛔ Retired 2026-07-02 (`games.fairyfox.io` gone; workflow + config removed) |
