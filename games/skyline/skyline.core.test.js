@@ -14,15 +14,16 @@
  *   8. Determinism under a seeded rng
  *   9. Milestones (crossed range, ascending, well-formed)
  *  10. Regression — tick() only slides and can NEVER end a run; drop is inert off-play
+ *  11. Varied structure — the wind: a stage-gated, seeded sequence of named formations
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CONFIG, createGame, reset, start, topBlock, speedOf, spawnCurrent,
+  CONFIG, createGame, reset, start, topBlock, speedOf, slabSpeed, spawnCurrent,
   moveCurrent, drop, tick, milestoneBetween,
   ACHIEVEMENTS, stageIndexAt, stageAt, stageProgress, normalizeMeta, applyRun, newlyEarned,
-  nearMissLine,
+  nearMissLine, pickFormation, loadFormation,
 } from './skyline.core.js';
 
 /** Deterministic RNG (mulberry32) so spawns are reproducible. */
@@ -247,13 +248,15 @@ test('REGRESSION: tick() only slides and never ends the run', () => {
 
 test('drop() and tick() are inert before start and after death', () => {
   const menu = newGame(); // menu phase
-  assert.deepEqual(drop(menu), { placed: false, died: false, perfect: false, sliced: 0 });
+  assert.deepEqual(drop(menu),
+    { placed: false, died: false, perfect: false, sliced: 0, formation: null });
   assert.deepEqual(tick(menu), { died: false });
 
   const dead = newGame();
   start(dead);
   dead.phase = 'dead';
-  assert.deepEqual(drop(dead), { placed: false, died: false, perfect: false, sliced: 0 });
+  assert.deepEqual(drop(dead),
+    { placed: false, died: false, perfect: false, sliced: 0, formation: null });
   assert.deepEqual(tick(dead), { died: false });
 });
 
@@ -360,4 +363,189 @@ test('nearMissLine celebrates a tie and stays quiet otherwise', () => {
   assert.equal(nearMissLine(12, 10), null, 'a record is not a near miss');
   assert.equal(nearMissLine(0, 0), null, 'no prior best → nothing to be close to');
   assert.equal(nearMissLine(5, 8, 1), null, 'respects a tighter margin');
+});
+
+// ── 11. Varied structure — the wind (stage-gated, seeded formations) ────────────
+// A run is a seeded *sequence of named wind patterns*, not one flat generator. These
+// tests pin the pattern's contract: the pool is well-formed, every spec is in bounds,
+// selection is stage-gated + deterministic, distinct seeds build distinct runs, the
+// queue never starves, and the opening is always a calm on-ramp (frame-one guard).
+
+const STAGE_TOP = CONFIG.STAGES.length - 1;
+
+test('the formation pool is well-formed and opens with a calm on-ramp', () => {
+  const pool = CONFIG.FORMATIONS;
+  assert.ok(pool.length >= 4, 'a pool worth calling varied');
+  const ids = new Set(), names = new Set();
+  let prevMin = -1;
+  for (const f of pool) {
+    assert.equal(typeof f.id, 'string');
+    assert.equal(typeof f.name, 'string');
+    assert.equal(typeof f.build, 'function');
+    assert.equal(typeof f.weight, 'function');
+    assert.equal(typeof f.notable, 'boolean');
+    assert.ok(Number.isInteger(f.minStage) && f.minStage >= 0);
+    assert.ok(f.minStage <= STAGE_TOP, `${f.id} is reachable within the stage arc`);
+    assert.ok(!ids.has(f.id), 'ids are unique');
+    assert.ok(!names.has(f.name), 'names are unique');
+    ids.add(f.id); names.add(f.name);
+    assert.ok(f.minStage >= prevMin, 'pool is ordered by minStage (non-decreasing)');
+    prevMin = f.minStage;
+  }
+  const opening = pool.filter(f => f.minStage === 0);
+  assert.ok(opening.length >= 1, 'at least one formation is available from stage 0');
+  assert.ok(opening.every(f => !f.notable), 'the stage-0 pool is calm — no cue on the on-ramp');
+});
+
+test('every formation builds ≥1 slab spec, all values inside the legal bounds', () => {
+  for (const f of CONFIG.FORMATIONS) {
+    for (let seed = 1; seed <= 40; seed++) {
+      const rng = seeded(seed * 31 + f.minStage);
+      for (let stage = f.minStage; stage <= STAGE_TOP; stage++) {
+        const specs = f.build({ rng, stage, cfg: CONFIG });
+        assert.ok(Array.isArray(specs) && specs.length >= 1, `${f.id} yields a chunk`);
+        for (const s of specs) {
+          assert.ok(s.fx >= 0 && s.fx <= 1, `${f.id}: fx in [0,1] (got ${s.fx})`);
+          assert.ok(s.dir === 1 || s.dir === -1, `${f.id}: dir is ±1`);
+          assert.ok(s.speedMul >= CONFIG.SPEED_MUL_MIN && s.speedMul <= CONFIG.SPEED_MUL_MAX,
+            `${f.id}: speedMul in band (got ${s.speedMul})`);
+        }
+      }
+    }
+  }
+});
+
+test('pickFormation only ever returns a stage-eligible formation', () => {
+  for (let stage = 0; stage <= STAGE_TOP; stage++) {
+    const rng = seeded(7 + stage);
+    for (let i = 0; i < 400; i++) {
+      const f = pickFormation(CONFIG, stage, rng, null);
+      assert.ok(stage >= f.minStage, `${f.id} (minStage ${f.minStage}) leaked into stage ${stage}`);
+    }
+  }
+});
+
+test('pickFormation is deterministic under a seed', () => {
+  const seq = (s) => {
+    const rng = seeded(s);
+    return Array.from({ length: 30 }, () => pickFormation(CONFIG, 2, rng, null).id);
+  };
+  assert.deepEqual(seq(99), seq(99), 'same seed → same sequence');
+  assert.notDeepEqual(seq(99), seq(100), 'a different seed picks differently');
+});
+
+test('climbing the stages opens the pool: the calm share collapses toward the top', () => {
+  const calmShare = (stage) => {
+    const rng = seeded(4242 + stage);
+    let calm = 0;
+    const N = 3000;
+    for (let i = 0; i < N; i++) if (!pickFormation(CONFIG, stage, rng, null).notable) calm++;
+    return calm / N;
+  };
+  const low = calmShare(0), top = calmShare(STAGE_TOP);
+  assert.ok(low > 0.75, `stage 0 stays calm (got ${low.toFixed(2)})`);
+  assert.ok(top < 0.40, `the top stage leans on the wild wind (got ${top.toFixed(2)})`);
+  assert.ok(top < low, 'the pool opens as you climb — progression drives the variation');
+});
+
+test('a run opens on a calm formation — the frame-one guard holds', () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    const g = createGame(W, H, { rng: seeded(seed) });
+    start(g);
+    assert.equal(g.formNotable, false, 'the opening wind is calm');
+    assert.equal(g.current.formHead, false, 'no cue fires on the first slab');
+    assert.equal(g.current.speedMul, 1, 'the opening slab rides the plain score ramp');
+    assert.ok(g.current.x >= 0 && g.current.x + g.current.width <= g.w, 'in-field');
+  }
+});
+
+test('distinct seeds build distinct run structures; the same seed repeats exactly', () => {
+  // Drive a run with a forced flush drop each time (score climbs fast → stages open),
+  // recording the sequence of formation ids the wind hands out.
+  const structure = (seed) => {
+    const g = createGame(W, H, { rng: seeded(seed) });
+    start(g);
+    const ids = [];
+    for (let i = 0; i < 120; i++) {
+      const prev = topBlock(g);
+      g.current = { ...g.current, x: prev.x, width: prev.width };  // force flush → +bonus
+      const r = drop(g);
+      assert.equal(r.died, false);
+      ids.push(g.formId);
+    }
+    return ids;
+  };
+  assert.deepEqual(structure(11), structure(11), 'same seed → identical structure');
+  const a = structure(11), b = structure(12);
+  assert.notDeepEqual(a, b, 'distinct seeds → distinct structures');
+  // ...and the deep run actually reaches the gated wind (progression, not just noise).
+  assert.ok(new Set(a).size >= 3, 'a long run cycles through several wind patterns');
+  assert.ok(a.includes('squall') || b.includes('squall'), 'The Squall shows up at the Spire');
+});
+
+test('the formation queue never starves across a long run, and cues only the notable', () => {
+  const g = createGame(W, H, { rng: seeded(2026) });
+  start(g);
+  let cues = 0, calmCues = 0;
+  for (let i = 0; i < 500; i++) {
+    const prev = topBlock(g);
+    g.current = { ...g.current, x: prev.x, width: prev.width };  // flush every drop
+    const r = drop(g);
+    assert.equal(r.died, false, 'a flush drop never dies');
+    assert.ok(g.current.form, 'the live slab always belongs to a named formation');
+    assert.ok(g.current.speedMul >= CONFIG.SPEED_MUL_MIN
+      && g.current.speedMul <= CONFIG.SPEED_MUL_MAX, 'speedMul stays in band');
+    if (r.formation) {
+      cues++;
+      const f = CONFIG.FORMATIONS.find(x => x.name === r.formation);
+      assert.ok(f, 'a cue names a real formation');
+      if (!f.notable) calmCues++;
+    }
+  }
+  assert.ok(cues > 5, 'notable patterns arrive and announce themselves');
+  assert.equal(calmCues, 0, 'the calm patterns never cue — the field stays quiet');
+});
+
+test('loadFormation refills a spent queue and records the live pattern', () => {
+  const g = createGame(W, H, { rng: seeded(5) });
+  start(g);
+  g.formSlabs = [];
+  g.score = 200;                        // top stage → the whole pool is eligible
+  loadFormation(g);
+  assert.ok(g.formSlabs.length >= 1, 'the queue is refilled');
+  assert.ok(g.formId && g.formName, 'the live pattern is recorded for the shell');
+  assert.equal(g.formSlabs[0].head, true, 'the leading slab carries the name cue');
+});
+
+// ── Wind speed — the multiplier modulates the ramp, and can never spike past it ──
+test('slabSpeed multiplies the score ramp and is hard-capped', () => {
+  const g = newGame();
+  start(g);
+  g.current = { x: 0, width: 100, dir: 1, speedMul: 1 };
+  assert.ok(Math.abs(slabSpeed(g) - speedOf(g)) < 1e-9, 'no wind → the plain ramp');
+
+  g.current.speedMul = 1.4;
+  assert.ok(Math.abs(slabSpeed(g) - speedOf(g) * 1.4) < 1e-9, 'a gust slides faster');
+
+  g.current.speedMul = 0.75;
+  assert.ok(slabSpeed(g) < speedOf(g), 'a plumb line crawls');
+
+  g.score = 500;                        // ramp pinned at SPEED_MAX
+  g.current.speedMul = CONFIG.SPEED_MUL_MAX;
+  assert.ok(slabSpeed(g) <= CONFIG.SPEED_HARD_MAX + 1e-9, 'the hard cap holds — no hidden spike');
+
+  delete g.current.speedMul;            // a hand-built slab (legacy shape) still rides the ramp
+  assert.ok(Math.abs(slabSpeed(g) - speedOf(g)) < 1e-9);
+});
+
+test('moveCurrent honours the wind: a gusting slab outruns a calm one', () => {
+  const mk = (mul) => {
+    const g = newGame();
+    start(g);
+    g.current = { x: 100, width: 100, dir: 1, speedMul: mul };
+    moveCurrent(g);
+    return g.current.x;
+  };
+  assert.ok(mk(1.4) > mk(1), 'a gust covers more ground per tick');
+  assert.ok(mk(0.75) < mk(1), 'a plumb line covers less');
 });

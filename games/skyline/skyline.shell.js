@@ -37,6 +37,7 @@ const newbestEl = el('newbest'), overTitle = el('overTitle'), statsEl = el('stat
 const startPanel = el('start'), overPanel = el('gameover'), toastEl = el('toast');
 const stageChip = el('stageChip'), stageNameEl = el('stageName'), stageFill = el('stageFill');
 const badgesEl = el('badges'), metaLineEl = el('metaLine');
+const formCueEl = el('formCue');
 
 const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; }
@@ -82,11 +83,23 @@ function enterStage(i) {
   if (i > 0 && !reduceMotion) { stagePulse = 1; shake = Math.max(shake, 6); }
   updateStageChip();
 }
+// Formation cue — a quiet name flashed as a *notable* wind pattern arrives (the
+// varied-structure layer). The calm patterns pass silently, keeping the field clean.
+let formCueTimer = 0;
+function showFormCue(name) {
+  if (!formCueEl || !name) return;
+  formCueEl.textContent = '◇ ' + name;
+  formCueEl.classList.add('show');
+  clearTimeout(formCueTimer);
+  formCueTimer = setTimeout(() => formCueEl.classList.remove('show'), 1500);
+}
+
 function beginRun() {
   Sky.start(game);
   stageIdx = 0; stagePulse = 0;
   tintCur = hexToRgb(game.cfg.STAGES[0].tint); tintTarget = { ...tintCur };
   if (stageChip) stageChip.classList.remove('hide');
+  if (formCueEl) formCueEl.classList.remove('show');
   scoreEl.textContent = '0';
   updateStageChip();
 }
@@ -139,6 +152,7 @@ function press() {
     const si = Sky.stageIndexAt(game.cfg, game.score);
     if (si !== stageIdx) enterStage(si);
     updateStageChip();
+    if (r.formation) showFormCue(r.formation);  // a notable wind pattern just arrived
   }
 }
 window.addEventListener('mousedown', e => { e.preventDefault(); press(); });
@@ -171,6 +185,7 @@ function stepShards() {
 function onDeath() {
   shake = 16; flash = 0;
   if (stageChip) stageChip.classList.add('hide');
+  if (formCueEl) formCueEl.classList.remove('show');
   spawnShard(game.current.width); // the missed slab tumbles
   finalEl.textContent = game.score;
 
@@ -315,12 +330,24 @@ function draw() {
       ctx.restore();
     }
     ctx.globalAlpha = 1;
-    // live sliding slab (one level above the top), glowing
+    // live sliding slab (one level above the top), glowing. The wind its formation handed
+    // it reads on the slab itself: a fast slab drags a short motion streak and burns
+    // brighter, a slow one sits calm — so you can *see* a Gust or a Plumb Line coming
+    // without reading the cue.
     if (game.phase === 'play') {
       const c = game.current;
+      const hue = slabHue(game.blocks.length);
+      const mul = c.speedMul || 1;
       const y = slabScreenY(game.blocks.length - 1) - game.cfg.SLAB_H;
-      ctx.shadowBlur = 18; ctx.shadowColor = `hsl(${slabHue(game.blocks.length)},90%,65%)`;
-      drawSlab(c.x, y, c.width, slabHue(game.blocks.length), true);
+      if (mul > 1.1 && !reduceMotion) {
+        const streak = Math.min(46, (mul - 1) * 90);   // trailing edge, behind the motion
+        ctx.globalAlpha = 0.16;
+        drawSlab(c.x - c.dir * streak, y, c.width, hue, false);
+        ctx.globalAlpha = 1;
+      }
+      ctx.shadowBlur = 18 + (mul - 1) * 26;
+      ctx.shadowColor = `hsl(${hue},90%,65%)`;
+      drawSlab(c.x, y, c.width, hue, true);
       ctx.shadowBlur = 0;
     }
   }
