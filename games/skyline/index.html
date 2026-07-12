@@ -72,6 +72,17 @@
   @keyframes chipPop { 0%{transform:scale(1)} 30%{transform:scale(1.28)} 100%{transform:scale(1)} }
   @media (prefers-reduced-motion: reduce){ #stageChip.pop #stageName{ animation:none } #stageFill{ transition:none } }
 
+  /* Formation cue — a quiet name that flashes as a notable wind pattern arrives
+     (varied-structure layer). Peripheral; the calm patterns pass silently. */
+  #formCue {
+    position:absolute; top:104px; left:50%; transform:translateX(-50%) translateY(-4px);
+    font-size:12px; letter-spacing:.22em; text-transform:uppercase; font-weight:600;
+    color:#7af9d0; opacity:0; pointer-events:none;
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  #formCue.show { opacity:.82; transform:translateX(-50%) translateY(0); }
+  @media (prefers-reduced-motion: reduce){ #formCue{ transition:opacity .2s ease } }
+
   /* Game-over run report (Growth L2). */
   .badges { display:flex; flex-direction:column; gap:6px; margin-top:14px; align-items:center; }
   .badge { display:flex; flex-direction:column; gap:1px; padding:6px 14px; border-radius:10px;
@@ -93,6 +104,7 @@
     <div id="stageName">Foundation</div>
     <div id="stageBar"><div id="stageFill"></div></div>
   </div>
+  <div id="formCue"></div>
 
   <div class="panel" id="start">
     <div class="title">Skyline</div>
@@ -101,8 +113,10 @@
       leaves you a narrower target. It slides faster the higher you build.</div>
     <div class="tip"><b>Tip:</b> a <b>flush</b> drop (dead-on) keeps the full width <em>and</em>
       pays double — and a <b>run of flush drops</b> pays an escalating bonus, so chaining
-      perfects is where the big towers come from. Climb the <b>stages</b> (Foundation →
-      Mid-rise → High-rise → Spire); feats earn <b>badges</b> that stick across runs.</div>
+      perfects is where the big towers come from. The <b>wind</b> shifts as you build
+      (Crosswind · Plumb Line · Gust · Shear · The Squall), so no two towers rise the same;
+      climbing the <b>stages</b> (Foundation → Mid-rise → High-rise → Spire) brings the
+      wilder ones out. Feats earn <b>badges</b> that stick across runs.</div>
     <div class="prompt">Click / Space to begin</div>
   </div>
 

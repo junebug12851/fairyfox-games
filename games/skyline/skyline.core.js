@@ -39,7 +39,13 @@ export const CONFIG = Object.freeze({
   SLAB_H: 26,         // slab height (px) — purely for the shell's layout/feel
   SPEED_BASE: 3.4,    // slab slide speed at score 0 (px/tick)
   SPEED_INC: 0.14,    // slide speed added per point of score (px/tick)
-  SPEED_MAX: 9.5,     // slide speed cap (px/tick)
+  SPEED_MAX: 9.5,     // slide speed cap (px/tick) — the score-driven ramp's ceiling
+  // The wind (varied structure): a formation can hand each slab its own slide-speed
+  // multiplier, so an arriving slab is calm, gusting, or shearing. Bounded on both
+  // sides, and the *final* speed is hard-capped so no formation can spike past the ramp.
+  SPEED_MUL_MIN: 0.7,
+  SPEED_MUL_MAX: 1.55,
+  SPEED_HARD_MAX: 12, // absolute px/tick ceiling after the multiplier (honest difficulty)
   PERFECT_EPS: 3.5,   // |offset| at or below this counts as a perfect drop (px)
   PERFECT_BONUS: 1,   // extra points a perfect drop pays (on top of the base +1)
   STREAK_BONUS_MAX: 4,// a run of perfects pays escalating extra — the greed/skill reward:
@@ -62,7 +68,171 @@ export const CONFIG = Object.freeze({
     Object.freeze({ at: 60,  name: 'High-rise',  tint: '#a98cff' }),
     Object.freeze({ at: 120, name: 'Spire',      tint: '#ff8f6a' }),
   ]),
+
+  // ── Formations — the WIND (varied structure) ──────────────────────────────────
+  // Slabs used to arrive from one flat generator: a random edge-safe start, a random
+  // direction, the score's speed. Textureless — every run's crane behaved the same.
+  // Now a run is a seeded *sequence of named wind patterns*: the crane holds a Steady
+  // hand, swings a long Crosswind, drops into a slow centred **Plumb Line** (the flush-
+  // streak window), catches a **Gust**, gets thrown by a **Shear**, and — at the top —
+  // rides **The Squall**. `minStage` gates each, so climbing the stages *opens the pool*
+  // (progression drives the variation); `weight(stage)` leans on the mean patterns late.
+  // `notable` patterns earn a quiet name cue; the calm ones pass silently.
+  // Each build fn is pure given `ctx.rng` and returns slab specs `{fx, dir, speedMul}`:
+  //   fx       start position as a fraction of the slab's legal travel range [0,1]
+  //   dir      1 (heading right) or -1 (heading left)
+  //   speedMul slide-speed multiplier, clamped to [SPEED_MUL_MIN, SPEED_MUL_MAX]
+  FORMATIONS: Object.freeze([
+    Object.freeze({ id: 'steady',    name: 'Steady',      minStage: 0, notable: false,
+      weight: (s) => Math.max(1, 3 - s), build: buildSteady }),
+    Object.freeze({ id: 'crosswind', name: 'Crosswind',   minStage: 0, notable: false,
+      weight: (s) => Math.max(1, 3 - s), build: buildCrosswind }),
+    Object.freeze({ id: 'plumb',     name: 'Plumb Line',  minStage: 1, notable: true,
+      weight: () => 2, build: buildPlumb }),
+    Object.freeze({ id: 'gust',      name: 'Gust',        minStage: 1, notable: true,
+      weight: (s) => s, build: buildGust }),
+    Object.freeze({ id: 'shear',     name: 'Shear',       minStage: 2, notable: true,
+      weight: (s) => s, build: buildShear }),
+    Object.freeze({ id: 'squall',    name: 'The Squall',  minStage: 3, notable: true,
+      weight: (s) => Math.max(0, s - 1), build: buildSquall }),
+  ]),
 });
+
+// ── Formations (the run's varied structure) ──────────────────────────────────────
+// Each build fn is PURE given `ctx.rng` and returns an array of slab specs
+// `{fx, dir, speedMul}`. `ctx` = { rng, stage, cfg }. Names/behaviours are Skyline's
+// flavour (the wind at altitude); the *shape* — a pool of stage-weighted, seeded
+// patterns pulled one beat at a time — is the reusable varied-structure standard.
+
+/** A random direction from the game's rng. */
+function pickDir(rng) { return rng() < 0.5 ? 1 : -1; }
+
+/** Steady — the calm baseline (the old flat generator, kept as the on-ramp): random
+ *  starts, random headings, the score's own speed. Silent. */
+function buildSteady(ctx) {
+  const { rng } = ctx;
+  const n = 3 + Math.floor(rng() * 3);            // 3..5 slabs
+  const out = [];
+  for (let i = 0; i < n; i++) out.push({ fx: rng(), dir: pickDir(rng), speedMul: 1 });
+  return out;
+}
+
+/** Crosswind — the crane swings wide: each slab enters hard against one edge and heads
+ *  across, alternating sides. Long, readable sweeps; a calm, rhythmic breather. Silent. */
+function buildCrosswind(ctx) {
+  const { rng } = ctx;
+  const n = 3 + Math.floor(rng() * 3);            // 3..5 slabs
+  let left = rng() < 0.5;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push(left
+      ? { fx: rng() * 0.06, dir: 1, speedMul: 1 }
+      : { fx: 0.94 + rng() * 0.06, dir: -1, speedMul: 1 });
+    left = !left;
+  }
+  return out;
+}
+
+/** Plumb Line — the wind drops. Slabs arrive near centre and crawl (0.75×): the flush
+ *  window. It is the *greed* beat — the easiest place in the game to chain perfects and
+ *  cash the escalating streak bonus, so it pays to notice it and commit. Notable. */
+function buildPlumb(ctx) {
+  const { rng } = ctx;
+  const n = 3 + Math.floor(rng() * 2);            // 3..4 slabs
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({ fx: 0.5 + (rng() - 0.5) * 0.16, dir: pickDir(rng), speedMul: 0.75 });
+  }
+  return out;
+}
+
+/** Gust — a short run of fast slabs thrown in from an edge (1.22×–1.40×). The timing
+ *  you just settled into is suddenly early. Notable. */
+function buildGust(ctx) {
+  const { rng } = ctx;
+  const n = 3 + Math.floor(rng() * 2);            // 3..4 slabs
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const left = rng() < 0.5;
+    out.push({
+      fx: left ? rng() * 0.08 : 0.92 + rng() * 0.08,
+      dir: left ? 1 : -1,
+      speedMul: 1.22 + rng() * 0.18,
+    });
+  }
+  return out;
+}
+
+/** Shear — the wind alternates layer to layer: a crawling slab, then a racing one, then
+ *  a crawl. Rhythm is useless here; you have to read each slab. Notable. */
+function buildShear(ctx) {
+  const { rng } = ctx;
+  const n = 4 + Math.floor(rng() * 3);            // 4..6 slabs
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({ fx: rng(), dir: pickDir(rng), speedMul: i % 2 === 0 ? 0.8 : 1.42 });
+  }
+  return out;
+}
+
+/** The Squall — the late crescendo, only at the Spire: a long run of near-max-speed
+ *  slabs hurled in from alternating edges. The top of the tower is the storm. Notable. */
+function buildSquall(ctx) {
+  const { rng } = ctx;
+  const n = 5 + Math.floor(rng() * 3);            // 5..7 slabs
+  let left = rng() < 0.5;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      fx: left ? rng() * 0.05 : 0.95 + rng() * 0.05,
+      dir: left ? 1 : -1,
+      speedMul: 1.45 + rng() * 0.1,
+    });
+    left = !left;
+  }
+  return out;
+}
+
+/**
+ * Choose the next formation for a stage — a seeded, stage-weighted pick over the
+ * eligible pool (`minStage` ≤ stage), softly avoiding an immediate repeat. Pure given
+ * `rng`. This is what makes each run's *sequence* of wind patterns differ while still
+ * escalating: climbing the stages opens the pool and leans on the mean patterns.
+ * @param {SkylineConfig} cfg
+ * @param {number} stage current stage index
+ * @param {() => number} rng
+ * @param {?string} prevId id of the formation just finished (soft-avoided), or null
+ * @returns {{id:string,name:string,notable:boolean,minStage:number,weight:Function,build:Function}}
+ */
+export function pickFormation(cfg, stage, rng, prevId) {
+  const pool = cfg.FORMATIONS.filter(f => stage >= f.minStage);
+  const list = pool.length ? pool : [cfg.FORMATIONS[0]];
+  const weights = list.map(f =>
+    Math.max(0.0001, f.weight(stage)) * (f.id === prevId ? 0.35 : 1));
+  const total = weights.reduce((a, b) => a + b, 0);
+  let r = rng() * total;
+  for (let i = 0; i < list.length; i++) { r -= weights[i]; if (r <= 0) return list[i]; }
+  return list[list.length - 1];
+}
+
+/**
+ * Load the next formation into `g.formSlabs` (resolved `{fx, dir, speedMul}` specs, the
+ * first marked as the formation head), and record its identity on `g.formId`/`g.formName`.
+ * Pure logic over the game's rng. Called by {@link spawnCurrent} when the queue is spent.
+ * @param {GameState} g
+ * @returns {void}
+ */
+export function loadFormation(g) {
+  const cfg = g.cfg;
+  const stage = stageIndexAt(cfg, g.score);
+  const f = pickFormation(cfg, stage, g.rng, g.formId);
+  const specs = f.build({ rng: g.rng, stage, cfg });
+  if (specs.length) specs[0].head = true;         // the leading slab carries the name cue
+  g.formSlabs = specs;
+  g.formId = f.id;
+  g.formName = f.name;
+  g.formNotable = f.notable;
+}
 
 /**
  * Achievement definitions — plain data (Growth Architecture Layer 2). Pure predicates.
@@ -94,8 +264,10 @@ export const ACHIEVEMENTS = Object.freeze([
  */
 
 /**
- * The live, sliding slab that has not been dropped yet.
- * @typedef {{x:number, width:number, dir:(1|-1)}} LiveSlab
+ * The live, sliding slab that has not been dropped yet. `speedMul` is the wind its
+ * formation handed it (absent ⇒ 1); `form`/`formHead` let the shell name a notable
+ * pattern as it arrives.
+ * @typedef {{x:number, width:number, dir:(1|-1), speedMul?:number, form?:?string, formHead?:boolean}} LiveSlab
  */
 
 /**
@@ -114,6 +286,10 @@ export const ACHIEVEMENTS = Object.freeze([
  * @property {number} streak              current run of consecutive perfect drops
  * @property {number} bestStreak          longest perfect streak this run
  * @property {number} t                   ticks elapsed this run
+ * @property {Array<Object>} formSlabs    remaining slab specs of the live formation
+ * @property {?string} formId             id of the live formation
+ * @property {?string} formName           display name of the live formation
+ * @property {boolean} formNotable        does the live formation earn a name cue?
  */
 
 /**
@@ -132,8 +308,9 @@ export function createGame(width, height, opts = {}) {
     w: width, h: height, cfg,
     rng: opts.rng || Math.random,
     phase: 'menu',
-    blocks: [], current: { x: 0, width: cfg.BASE_W, dir: 1 },
+    blocks: [], current: { x: 0, width: cfg.BASE_W, dir: 1, speedMul: 1 },
     score: 0, placed: 0, perfects: 0, streak: 0, bestStreak: 0, t: 0,
+    formSlabs: [], formId: null, formName: null, formNotable: false,
   };
   reset(g);
   return g;
@@ -149,7 +326,8 @@ export function topBlock(g) {
 }
 
 /**
- * Current slide speed — scales with score, capped at SPEED_MAX.
+ * The score-driven base slide speed — scales with score, capped at SPEED_MAX. This is
+ * the honest difficulty ramp; the wind (a formation's `speedMul`) modulates it.
  * @param {GameState} g
  * @returns {number} px per tick
  */
@@ -158,18 +336,49 @@ export function speedOf(g) {
 }
 
 /**
- * Spawn the next live slab above the tower: as wide as the top slab, starting at a
- * random edge-safe position and heading a random direction (both from the game's
- * rng, so a seeded run is reproducible).
+ * The speed the *live* slab actually slides at: the score ramp times the wind its
+ * formation handed it, hard-capped at SPEED_HARD_MAX so no pattern can spike past the
+ * ramp. A slab with no multiplier (e.g. one a test set by hand) rides the plain ramp.
+ * Pure.
+ * @param {GameState} g
+ * @returns {number} px per tick
+ */
+export function slabSpeed(g) {
+  const mul = g.current && g.current.speedMul > 0 ? g.current.speedMul : 1;
+  return Math.min(g.cfg.SPEED_HARD_MAX, speedOf(g) * mul);
+}
+
+/**
+ * Spawn the next live slab above the tower: as wide as the top slab (the invariant that
+ * makes width monotonically non-increasing), placed and wound up by the next spec of the
+ * live **formation** — refilling from a fresh, stage-eligible formation when the queue is
+ * spent. Pure given the game's rng, so a seeded run reproduces the same sequence of wind
+ * patterns.
  * @param {GameState} g
  * @returns {LiveSlab} the new live slab (also stored on `g.current`)
  */
 export function spawnCurrent(g) {
+  const cfg = g.cfg;
   const width = topBlock(g).width;
   const maxX = Math.max(0, g.w - width);
-  const x = g.rng() * maxX;
-  const dir = g.rng() < 0.5 ? 1 : -1;
-  g.current = { x, width, dir };
+  if (!g.formSlabs || !g.formSlabs.length) loadFormation(g);
+  const spec = g.formSlabs.shift() || { fx: g.rng(), dir: 1, speedMul: 1 };
+
+  const fx = Math.max(0, Math.min(1, Number(spec.fx) || 0));
+  const dir = spec.dir === -1 ? -1 : 1;
+  const speedMul = Math.max(cfg.SPEED_MUL_MIN,
+    Math.min(cfg.SPEED_MUL_MAX, Number(spec.speedMul) || 1));
+
+  g.current = {
+    x: fx * maxX,
+    width,
+    dir,
+    speedMul,
+    form: g.formName,
+    // Only a *notable* formation's leading slab earns a name cue; the calm ones pass
+    // silently, keeping the field clean for a first-timer.
+    formHead: spec.head === true && g.formNotable === true,
+  };
   return g.current;
 }
 
@@ -189,6 +398,12 @@ export function reset(g) {
   g.streak = 0;
   g.bestStreak = 0;
   g.t = 0;
+  // Clear the wind. At score 0 only the calm formations are stage-eligible, so the
+  // opening is always a gentle on-ramp — the frame-one guard for varied structure.
+  g.formSlabs = [];
+  g.formId = null;
+  g.formName = null;
+  g.formNotable = false;
   spawnCurrent(g);
   return g;
 }
@@ -213,7 +428,7 @@ export function start(g) {
 export function moveCurrent(g) {
   const c = g.current;
   const maxX = Math.max(0, g.w - c.width);
-  c.x += c.dir * speedOf(g);
+  c.x += c.dir * slabSpeed(g);
   if (c.x <= 0) { c.x = 0; c.dir = 1; }
   else if (c.x >= maxX) { c.x = maxX; c.dir = -1; }
   return c;
@@ -226,6 +441,8 @@ export function moveCurrent(g) {
  * @property {boolean} died    the run ended (the slab missed the tower entirely)
  * @property {boolean} perfect the drop was dead-on (within PERFECT_EPS)
  * @property {number}  sliced  width of overhang sliced away this drop (0 on perfect)
+ * @property {?string} formation name of a *notable* wind pattern whose leading slab just
+ *   arrived (Plumb Line / Gust / Shear / The Squall), else null — the shell's name cue
  */
 
 /**
@@ -237,7 +454,9 @@ export function moveCurrent(g) {
  * @returns {DropResult}
  */
 export function drop(g) {
-  if (g.phase !== 'play') return { placed: false, died: false, perfect: false, sliced: 0 };
+  if (g.phase !== 'play') {
+    return { placed: false, died: false, perfect: false, sliced: 0, formation: null };
+  }
   const prev = topBlock(g);
   const cur = g.current;
   const left = Math.max(cur.x, prev.x);
@@ -246,7 +465,7 @@ export function drop(g) {
 
   if (overlap <= 0) {
     g.phase = 'dead';
-    return { placed: false, died: true, perfect: false, sliced: cur.width };
+    return { placed: false, died: true, perfect: false, sliced: cur.width, formation: null };
   }
 
   const overhang = cur.width - overlap;
@@ -269,8 +488,13 @@ export function drop(g) {
     g.score += 1;
   }
   g.placed++;
-  spawnCurrent(g);
-  return { placed: true, died: false, perfect, sliced: perfect ? 0 : overhang };
+  // The score has just moved, so the *next* slab is drawn against the new stage — this
+  // is where climbing the tower opens the wind pool (progression drives the variation).
+  const next = spawnCurrent(g);
+  return {
+    placed: true, died: false, perfect, sliced: perfect ? 0 : overhang,
+    formation: next.formHead ? next.form : null,
+  };
 }
 
 /**

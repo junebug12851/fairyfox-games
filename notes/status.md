@@ -2,7 +2,11 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.21.0` (single source of truth: repo-root `VERSION`). **v0.21.0** is a **PLANT** run:
+**Version:** `0.21.1` (single source of truth: repo-root `VERSION`). **v0.21.1** is a **GROW** run:
+**Skyline** onto **varied structure + progression** (the **9th** game on the pattern) — its one flat
+slab generator is now **the wind**, a seeded sequence of named patterns (Steady · Crosswind · Plumb
+Line · Gust · Shear · The Squall), stage-gated so climbing the tower opens the pool.
+**v0.21.0** was a **PLANT** run:
 a new game, **Tether** — a genuinely new verb (**swing/grapple**), the collection's first pendulum
 and its **12th game**. Hold to rope onto an anchor and swing, let go to fly; *when* you release is
 everything. **v0.20.3** was a **GROW** run: **Ricochet** onto **varied structure + progression**
@@ -113,13 +117,24 @@ sole host), plus each game at `…/games/<game>/`.
   run-report) — legacy best preserved. Pure core (`computeShot`) + 41 tests. **(8th game on
   varied structure.)**
 - **Skyline** (`games/skyline/`) — drop a sliding slab onto your tower; the overhang is
-  sliced off so only precision keeps it climbing. **On the Growth Architecture**: flush
-  drops keep full width + pay double, and a **run of flush drops pays an escalating
-  bonus** (chaining perfects = big towers); a **stage arc** (Foundation → Mid-rise →
-  High-rise → Spire) with HUD chip + tinted sky, and **meta-progression** (`skyline.meta`:
-  lifetime floors/perfects/best-streak + 8 badges, run-report) — legacy best preserved.
-  A **near-miss** line (`nearMissLine`) nudges "N floors short of your best — so close!"
-  on non-record runs (Growth Wave 2). Pure core (no timer-driven death) + 27 tests.
+  sliced off so only precision keeps it climbing. **On Varied Structure + Growth**: the slab
+  no longer arrives from one flat rule — a run is a seeded **sequence of named wind patterns**
+  that **unlock as you climb the stages** (progression drives the variety; notable ones flash a
+  name cue) — `FORMATIONS`/`pickFormation`/`loadFormation`, `spawnCurrent` pulls each slab from a
+  per-formation queue of `{fx,dir,speedMul}` specs, `drop` emits a `formation` cue: **Steady**
+  (calm on-ramp), **Crosswind** (slabs enter hard against alternating edges — long sweeps),
+  **Plumb Line** (the wind drops: slow, near-centre slabs — the **flush-streak window**, and the
+  *greed* beat), **Gust** (a fast run thrown in from an edge), **Shear** (crawling ↔ racing slabs,
+  so rhythm is useless), **The Squall** (the Spire-only crescendo). The wind is a **multiplier on
+  the honest ramp, never past it** — `slabSpeed` = score-ramp × `speedMul`, band-clamped and
+  hard-capped (`SPEED_HARD_MAX`), so no pattern can spike difficulty; a fast slab drags a motion
+  streak + burns brighter, so the wind is legible *before* it's named. Plus flush drops keeping
+  full width + paying double and a **run of flush drops paying an escalating bonus** (chaining
+  perfects = big towers); a **stage arc** (Foundation → Mid-rise → High-rise → Spire) with HUD
+  chip + tinted sky, and **meta-progression** (`skyline.meta`: lifetime floors/perfects/best-streak
+  + 8 badges, run-report) — legacy best preserved. A **near-miss** line (`nearMissLine`) nudges
+  "N floors short of your best — so close!" on non-record runs. Pure core (no timer-driven death)
+  + 38 tests. **(9th game on varied structure.)**
 - **Loft** (`games/loft/`) — keep the glowing orbs aloft; tap a **falling** orb to bat
   it up (a rhythm, not a mash). **On the Growth Architecture**: a **cluster bonus**
   (`tapScore` — a 3-catch scores 6, so reading a bunch pays), a **stage arc** (Solo →
@@ -179,11 +194,35 @@ sole host), plus each game at `…/games/<game>/`.
   `sluice.best` preserved. Pure core + 35 tests. **(4th game on varied structure — ships on
   the pattern from day one.)**
 
-**Tests:** **435/435** green, released (Tether adds 32). ⚠ **Local gotcha:** the bare `node --test` from repo root now
+**Tests:** **446/446** green, released (Skyline's wind adds 11). ⚠ **Local gotcha:** the bare `node --test` from repo root now
 also walks the git-ignored `assets/references/` hub clone, whose unrelated tests fail (missing deps) —
 scope the run to `node --test "games/**/*.test.js"`. CI never checks out `assets/references/` (it's
 git-ignored), so CI's `node --test` sees only the game tests and is green.
 
+- **✅ v0.21.1 (2026-07-12) — GROW: Skyline onto varied structure — "the wind" (9th game on the
+  pattern).** Skyline's slab came from one flat rule (`spawnCurrent`: random edge-safe start, random
+  heading, the score's speed), so the only thing that ever varied was slide speed — every tower rose
+  the same. A run is now a seeded **sequence of named wind patterns** from a stage-weighted pool
+  (`FORMATIONS`/`pickFormation`/`loadFormation`, copied in shape from Polarity into its own core;
+  `spawnCurrent` pulls one `{fx,dir,speedMul}` spec at a time): **Steady** (the calm on-ramp),
+  **Crosswind** (alternating hard-edge entries — long, readable sweeps), **Plumb Line** (the wind
+  drops: slow 0.75×, near-centre slabs — the **flush-streak window** and the *greed* beat, the only
+  formation that makes the game easier, on purpose), **Gust** (1.22–1.40× thrown in from an edge),
+  **Shear** (0.8× ↔ 1.42× alternating — rhythm is useless), **The Squall** (Spire-only crescendo,
+  1.45–1.55×). `minStage` gates each, so climbing the stages **opens the pool** (the calm share
+  falls >75% → <40% from Foundation to Spire, pinned by a test); notable patterns flash a quiet
+  `#formCue`. **Key design call:** the wind is a *multiplier on the honest ramp*, never a new axis —
+  `slabSpeed()` = `speedOf()` × `speedMul`, band-clamped `[0.7, 1.55]` and hard-capped at
+  `SPEED_HARD_MAX`, so no pattern can spike past the difficulty the score earned (the standard's
+  "honest difficulty" guardrail made structural). A fast slab drags a motion streak + burns brighter
+  (reduced-motion honoured), so the wind is legible *before* it's named. +11 pure-core tests
+  (27 → 38); collection **446/446** green. **Chrome MCP was unavailable** — validated with a real
+  **headless Chrome render** of the live game (temp probe harness drove a forced top-stage Squall:
+  tower, HUD, stage chip, motion streak and the `◇ THE SQUALL` cue all render clean, no collision
+  with the stage chip, no console errors) plus a clean Jekyll build; a mobile-width off-centre panel
+  reproduced on shipped, untouched Ricochet → a headless-capture artifact, not a regression. Player
+  changelog + `_games` date + README re-gen. Released `dev → main` by default on green (PATCH).
+  **9 of 12 games on varied structure** (remaining: Loft, Poise).
 - **✅ v0.20.3 (2026-07-11) — GROW: Ricochet onto varied structure (8th game on the pattern).**
   Ricochet's field was a flat random sprinkle (a rejection-sampled point per refill), so every run
   offered the same textureless spread of angles. Targets now arrive as a seeded **sequence of named
@@ -398,7 +437,7 @@ git-ignored), so CI's `node --test` sees only the game tests and is green.
 
 ## Next
 
-- **Varied-structure rollout: 8 of 11.** Remaining: **Skyline, Loft, Poise** — one per GROW run,
+- **Varied-structure rollout: 9 of 12.** Remaining: **Loft, Poise** — one per GROW run,
   lowest-coverage first. In parallel, the **"depth inside the mechanic"** layer (v0.20.0, Polarity =
   reference) rolls across the collection: that is now the **lead** GROW lever for games already on
   varied structure.
@@ -414,8 +453,8 @@ git-ignored), so CI's `node --test` sees only the game tests and is green.
 
 | Area | Status |
 |------|--------|
-| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.21.0 release (tagged); working tree carries only the fresh session notes |
-| Tests (`node --test`) | ✅ **435/435** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
+| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.21.1 release (tagged); working tree carries only the fresh session notes |
+| Tests (`node --test`) | ✅ **446/446** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
 | CI (node --test) | ✅ Workflow in place |
 | GitHub Pages (`fairyfox.io/fairyfox-games/`) | ✅ Sole host — deploys on push to `main` |
 | Netlify | ⛔ Retired 2026-07-02 (`games.fairyfox.io` gone; workflow + config removed) |
