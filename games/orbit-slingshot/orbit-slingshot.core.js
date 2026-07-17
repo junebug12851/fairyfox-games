@@ -44,6 +44,25 @@ export const CONFIG = Object.freeze({
   CLOSE_BAND: 60,     // skim within this many px of the surface for a close-pass bonus
   CLOSE_BONUS_MAX: 3, // max bonus points for a dead-on skim
   EPS: 1,             // gravity softening floor to avoid divide-by-zero (px)
+  // The TECH (depth layer — discovered, never taught): inside the drawn close band hides a
+  // razor sub-window. Collect a target after passing within KISS_BAND of the surface and it's
+  // a KISS — extra points on top of the skim bonus, and a streak. A kiss is a subset of a
+  // max skim (the Echo Chamber node ⊂ perfect shape), so a beginner never needs to know.
+  KISS_BAND: 7,       // px above the surface the closest pass must stay within for a kiss
+  KISS_BONUS: 2,      // extra points a kissed pickup scores on top of the skim bonus
+  // The REVERSAL the tech unlocks: KISS_TRIGGER kissed pickups in a row light an AURORA over
+  // the planet — a timed window where every point doubles. Hard work (daring) pays off.
+  KISS_TRIGGER: 3,    // consecutive kissed pickups needed to light an aurora
+  AURORA_TICKS: 300,  // aurora duration (ticks; ~5s at 60fps)
+  AURORA_MULT: 2,     // score multiplier applied to every pickup while the aurora holds
+  // NO PLATEAU (depth layer): the pickup radius used to shrink only with the stage index, and
+  // the stages stop at Deep space (score 120) — past that the game never got harder, so the
+  // whole ceiling showed in minutes. The radius now also rides a smooth score asymptote:
+  // it keeps tightening forever, approaching (never reaching) 1-R_SHRINK_SPAN of the stage
+  // radius, half-travelled at R_SHRINK_K, and hard-floored so no override can spike it.
+  R_SHRINK_SPAN: 0.30, // asymptotic extra pickup-radius shrink the score approaches
+  R_SHRINK_K: 150,     // score at which the extra shrink is half-travelled (the ramp's knee)
+  R_HARD_MINFRAC: 0.5, // absolute pickup-radius floor as a fraction of TARGET_R (guards overrides)
   // Escalation — the difficulty texture that stages add (the core-fun fix; the base
   // game never got harder over a run). Per stage above 0: targets may spawn this much
   // nearer the planet (riskier reaches) and the pickup radius shrinks by this factor.
@@ -57,6 +76,9 @@ export const CONFIG = Object.freeze({
     Object.freeze({ at: 25,  name: 'Low orbit',     tint: '#8ab4ff' }),
     Object.freeze({ at: 60,  name: 'Geostationary', tint: '#a98cff' }),
     Object.freeze({ at: 120, name: 'Deep space',    tint: '#ff8f6a' }),
+    // A SECRET stage past Deep space — unlisted on the start screen, revealed only by reaching
+    // it (a card kept face-down for the pilot who pushes deep). `secret` flags it for the shell.
+    Object.freeze({ at: 240, name: 'Interstellar',  tint: '#e07bff', secret: true }),
   ]),
   // Formations — the run's STRUCTURE, not just its noise (the "varied-structure" layer;
   // Polarity is the reference build). Instead of every target being one flat random point
@@ -109,6 +131,13 @@ export const ACHIEVEMENTS = Object.freeze([
     test: (s, m) => m.totals.targets >= 1000 }),
   Object.freeze({ id: 'regular',      label: 'Regular',        desc: 'Finish 25 runs.',
     test: (s, m) => m.plays >= 25 }),
+  // Depth-layer badges (skill-safe — they mark discoveries, never grant power).
+  Object.freeze({ id: 'first-kiss',   label: 'Atmosphere kiss', desc: 'Collect a target after a razor-close pass.',
+    test: (s) => s.kisses >= 1 }),
+  Object.freeze({ id: 'aurora',       label: 'Aurora',         desc: 'Light an aurora over the planet.',
+    test: (s) => s.auroras >= 1 }),
+  Object.freeze({ id: 'reach-interstellar', label: 'Interstellar', desc: 'Reach the secret Interstellar stage.',
+    test: (s) => s.stageIndex >= 4 }),
 ]);
 
 /**
@@ -131,6 +160,10 @@ export const ACHIEVEMENTS = Object.freeze([
  * @property {number} skims              targets caught with a close-pass bonus (a stat to chase)
  * @property {number} bestBonus          biggest single close-pass bonus earned this run
  * @property {number} minDist            closest approach to the planet since the last pickup
+ * @property {number} kisses             kissed pickups this run (razor-close passes — the tech)
+ * @property {number} kissStreak         consecutive kissed pickups toward an aurora
+ * @property {number} aurora             aurora ticks remaining (0 = inactive; every point doubles)
+ * @property {number} auroras            auroras lit this run
  * @property {number} t                  ticks elapsed this run
  * @property {boolean} thrusting         whether thrust was applied last tick (view)
  * @property {null|'crash'|'escape'} cause  how the run ended, if dead
@@ -164,6 +197,7 @@ export function createGame(width, height, opts = {}) {
     pos: { x: 0, y: 0 }, vel: { x: 0, y: 0 },
     target: { x: 0, y: 0 },
     score: 0, targets: 0, skims: 0, bestBonus: 0, minDist: Infinity, t: 0, thrusting: false, cause: null,
+    kisses: 0, kissStreak: 0, aurora: 0, auroras: 0,  // depth layer: tech streak + reversal
     formTargets: [], formId: null, formName: null, formNotable: false, // current formation
   };
   reset(g);
@@ -186,6 +220,10 @@ export function reset(g) {
   g.skims = 0;
   g.bestBonus = 0;
   g.minDist = Infinity;
+  g.kisses = 0;       // depth layer: kissed pickups this run
+  g.kissStreak = 0;   // consecutive kissed pickups toward an aurora
+  g.aurora = 0;       // aurora ticks remaining (0 = not active)
+  g.auroras = 0;      // auroras lit this run
   g.t = 0;
   g.thrusting = false;
   g.cause = null;
@@ -256,15 +294,23 @@ export function stageProgress(cfg, score) {
 }
 
 /**
- * The effective target pickup radius — shrinks with stage so threading gets harder as
- * you climb (escalation). At stage 0 it equals CONFIG.TARGET_R. Pure.
+ * The effective target pickup radius — shrinks with stage AND rides a smooth score
+ * asymptote (the depth layer's no-plateau fix: the old stage-only shrink flat-lined at
+ * Deep space / score 120, after which the game never got harder). The asymptote keeps the
+ * window tightening forever — approaching, never reaching, `1 - R_SHRINK_SPAN` of the
+ * stage radius, half-travelled at `R_SHRINK_K` — and the whole product is hard-floored at
+ * `R_HARD_MINFRAC` so no formation or config override can spike past it. At score 0 it
+ * equals CONFIG.TARGET_R. Pure.
  * @param {GameState} g
  * @returns {number} px
  */
 export function targetRadius(g) {
-  const stage = stageIndexAt(g.cfg, g.score);
-  const frac = Math.max(g.cfg.STAGE_R_MINFRAC, 1 - stage * g.cfg.STAGE_R_SHRINK);
-  return g.cfg.TARGET_R * frac;
+  const c = g.cfg;
+  const stage = stageIndexAt(c, g.score);
+  const stageFrac = Math.max(c.STAGE_R_MINFRAC, 1 - stage * c.STAGE_R_SHRINK);
+  const s = Math.max(0, g.score);
+  const asym = 1 - c.R_SHRINK_SPAN * (s / (s + c.R_SHRINK_K)); // always creeping, never arriving
+  return c.TARGET_R * Math.max(c.R_HARD_MINFRAC, stageFrac * asym);
 }
 
 /**
@@ -479,7 +525,11 @@ export function outOfBounds(g) {
 
 /**
  * Result of a single {@link tick}.
- * @typedef {{scored:boolean, bonus?:number, died:boolean, cause:(null|'crash'|'escape'), formation:?string}} TickResult
+ * @typedef {{scored:boolean, bonus?:number, gain?:number, kissed?:boolean, aurora?:boolean, auroraStarted?:boolean, died:boolean, cause:(null|'crash'|'escape'), formation:?string}} TickResult
+ * @property {number} gain total points the pickup actually scored (incl. kiss bonus + aurora doubling)
+ * @property {boolean} kissed the pickup landed after a razor-close pass (the hidden tech)
+ * @property {boolean} aurora an aurora is currently lit (every point doubles)
+ * @property {boolean} auroraStarted this pickup just lit an aurora (for the shell's announcement)
  * @property {?string} formation name of a notable formation whose head target just appeared
  *   this tick (for the HUD cue), else null
  */
@@ -496,6 +546,7 @@ export function outOfBounds(g) {
 export function tick(g, input = {}) {
   if (g.phase !== 'play') return { scored: false, died: false, cause: null, formation: null };
   g.t++;
+  if (g.aurora > 0) g.aurora--;   // the aurora window counts down each playing tick
   const thrust = !!input.thrust;
   g.thrusting = thrust;
 
@@ -518,14 +569,33 @@ export function tick(g, input = {}) {
   if (hitPlanet(g)) { g.phase = 'dead'; g.cause = 'crash'; return { scored: false, died: true, cause: 'crash', formation: null }; }
   if (outOfBounds(g)) { g.phase = 'dead'; g.cause = 'escape'; return { scored: false, died: true, cause: 'escape', formation: null }; }
 
-  let scored = false, bonus = 0, formation = null;
+  let scored = false, bonus = 0, gain = 0, kissed = false, auroraStarted = false, formation = null;
   if (Math.hypot(g.pos.x - g.target.x, g.pos.y - g.target.y) < targetRadius(g) + g.cfg.PROBE_R) {
     bonus = closePassBonus(g);   // reward a risky skim past the planet
-    g.score += 1 + bonus;
+    // The TECH: a kiss — the closest pass stayed inside the razor sub-window above the
+    // surface (⊂ a max skim; discovered, never taught). Kissing pays extra and builds the
+    // streak; any pickup without one breaks it.
+    const surface = g.cfg.PLANET_R + g.cfg.PROBE_R;
+    kissed = (g.minDist - surface) <= g.cfg.KISS_BAND;
+    gain = 1 + bonus + (kissed ? g.cfg.KISS_BONUS : 0);
+    if (g.aurora > 0) gain *= g.cfg.AURORA_MULT;  // the reversal: a lit aurora doubles every point
+    g.score += gain;
     g.targets++;                 // pickups (distinct from score, which includes bonuses)
     if (bonus > 0) {             // a rewarded skim — track count and personal-best skim
       g.skims++;
       if (bonus > g.bestBonus) g.bestBonus = bonus;
+    }
+    if (kissed) {
+      g.kisses++;
+      g.kissStreak++;
+      if (g.kissStreak >= g.cfg.KISS_TRIGGER) {   // enough kisses in a row → light the aurora
+        g.aurora = g.cfg.AURORA_TICKS;
+        g.auroras++;
+        g.kissStreak = 0;
+        auroraStarted = true;
+      }
+    } else {
+      g.kissStreak = 0;          // a timid pickup breaks the kiss streak
     }
     scored = true;
     g.minDist = Infinity;        // fresh skim window for the next target
@@ -533,7 +603,7 @@ export function tick(g, input = {}) {
     // If the fresh target is the head of a *notable* formation, a new pattern just began.
     if (g.target.formHead) formation = g.target.form;
   }
-  return { scored, bonus, died: false, cause: null, formation };
+  return { scored, bonus, gain, kissed, aurora: g.aurora > 0, auroraStarted, died: false, cause: null, formation };
 }
 
 /**
@@ -570,7 +640,7 @@ export function milestoneAt(score) {
 
 /**
  * A finished run distilled to plain data for the meta layer.
- * @typedef {{score:number, stageIndex:number, targets:number, skims:number, bestBonus:number}} RunSummary
+ * @typedef {{score:number, stageIndex:number, targets:number, skims:number, bestBonus:number, kisses:number, auroras:number}} RunSummary
  */
 
 /**
@@ -581,7 +651,7 @@ export function milestoneAt(score) {
  * @property {number} best       best single-run score (mirrors `orbitslingshot.best`)
  * @property {number} bestStage
  * @property {number} bestBonus  biggest close-pass skim ever
- * @property {{targets:number, skims:number, points:number}} totals
+ * @property {{targets:number, skims:number, points:number, kisses:number}} totals
  * @property {Object<string,boolean>} achieved
  */
 
@@ -600,7 +670,7 @@ export function normalizeMeta(m, legacyBest = 0) {
     best: Math.max(src.best | 0, legacyBest | 0),
     bestStage: src.bestStage | 0,
     bestBonus: src.bestBonus | 0,
-    totals: { targets: t.targets | 0, skims: t.skims | 0, points: t.points | 0 },
+    totals: { targets: t.targets | 0, skims: t.skims | 0, points: t.points | 0, kisses: t.kisses | 0 },
     achieved: src.achieved && typeof src.achieved === 'object' ? { ...src.achieved } : {},
   };
 }
@@ -618,6 +688,7 @@ export function applyRun(meta, summary, cfg = CONFIG) {
   next.totals.targets += summary.targets | 0;
   next.totals.skims += summary.skims | 0;
   next.totals.points += summary.score | 0;
+  next.totals.kisses += summary.kisses | 0;
   next.best = Math.max(next.best, summary.score | 0);
   next.bestStage = Math.max(next.bestStage, summary.stageIndex | 0);
   next.bestBonus = Math.max(next.bestBonus, summary.bestBonus | 0);

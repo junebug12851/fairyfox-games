@@ -90,6 +90,7 @@ bestEl.textContent = best;
 let W = 0, H = 0, DPR = 1, game = null;
 let holding = false;          // is the thrust control currently held?
 let trail = [], flames = [], stars = [], shake = 0;
+let kissFlashes = [];         // gold rings that bloom where a kissed pickup landed (depth layer)
 // Stage feel state (Growth Layer 1)
 let stageIdx = 0, stagePulse = 0;
 let tintCur = hexToRgb('#6ad4ff'), tintTarget = { ...tintCur };
@@ -105,9 +106,11 @@ function updateStageChip() {
 /** Enter a new stage: ease the field tint, pop the chip, kick a soft beat. */
 function enterStage(i) {
   stageIdx = i;
-  tintTarget = hexToRgb(game.cfg.STAGES[i].tint);
+  const st = game.cfg.STAGES[i];
+  tintTarget = hexToRgb(st.tint);
   if (stageChip) { stageChip.classList.remove('pop'); void stageChip.offsetWidth; stageChip.classList.add('pop'); }
   if (i > 0 && !reduceMotion) { stagePulse = 1; shake = Math.max(shake, 6); }
+  if (st.secret) { showToast(st.name); shake = Math.max(shake, 10); }  // reveal the face-down stage
   updateStageChip();
 }
 
@@ -131,7 +134,7 @@ trail = [];
 
 // ── Input — hold to thrust; press also starts / restarts ──────────────────────
 function beginRun() {
-  Orbit.start(game); trail = [];
+  Orbit.start(game); trail = []; kissFlashes = [];
   stageIdx = 0; stagePulse = 0;
   tintCur = hexToRgb(game.cfg.STAGES[0].tint); tintTarget = { ...tintCur };
   if (stageChip) stageChip.classList.remove('hide');
@@ -163,6 +166,7 @@ function onDeath() {
   const summary = {
     score: game.score, stageIndex,
     targets: game.targets, skims: game.skims, bestBonus: game.bestBonus,
+    kisses: game.kisses, auroras: game.auroras,
   };
   const prev = meta;
   meta = Orbit.applyRun(prev, summary, game.cfg);
@@ -171,7 +175,9 @@ function onDeath() {
   // Run report: stage reached + how daring the skims were.
   if (overSubEl) {
     const skims = game.skims > 0 ? ` · ${game.skims} skim${game.skims === 1 ? '' : 's'} (best +${game.bestBonus})` : '';
-    overSubEl.textContent = 'Reached ' + game.cfg.STAGES[stageIndex].name + skims;
+    const kisses = game.kisses > 0 ? ` · ${game.kisses} kiss${game.kisses === 1 ? '' : 'es'}` : '';
+    const auroras = game.auroras > 0 ? ` · ${game.auroras} aurora${game.auroras === 1 ? '' : 's'}` : '';
+    overSubEl.textContent = 'Reached ' + game.cfg.STAGES[stageIndex].name + skims + kisses + auroras;
   }
   if (badgesEl) {
     badgesEl.innerHTML = '';
@@ -213,6 +219,8 @@ function spawnFlame() {
 function stepFx() {
   for (const f of flames) { f.x += f.vx; f.y += f.vy; f.life--; }
   flames = flames.filter(f => f.life > 0);
+  for (const k of kissFlashes) k.life--;
+  kissFlashes = kissFlashes.filter(k => k.life > 0);
   if (shake > 0.3) shake *= 0.85; else shake = 0;
   if (stagePulse > 0.01) stagePulse *= 0.94; else stagePulse = 0;
   tintCur.r += (tintTarget.r - tintCur.r) * 0.08;
@@ -236,10 +244,16 @@ function update(now) {
       if (r.scored) {
         shake = Math.min(shake + 4, 10);
         scoreEl.textContent = game.score;
-        // a milestone takes the toast; otherwise celebrate a close-pass bonus —
-        // a dead-on max skim earns the louder "Skim!" call-out.
-        if (!showMilestone(prev, game.score) && r.bonus > 0) {
-          showToast((r.bonus >= game.cfg.CLOSE_BONUS_MAX ? 'Skim! +' : 'Close pass +') + r.bonus);
+        // a gold ring blooms where a kissed pickup landed (the tech announces itself only
+        // by happening — it is never explained)
+        if (r.kissed) kissFlashes.push({ x: game.pos.x, y: game.pos.y, life: 28 });
+        // the aurora takes the toast; then a milestone; then a kiss; then a plain skim
+        if (r.auroraStarted) {
+          showToast('Aurora');
+          shake = Math.max(shake, 10);
+        } else if (!showMilestone(prev, game.score)) {
+          if (r.kissed) showToast('Kiss! +' + r.gain);
+          else if (r.bonus > 0) showToast((r.bonus >= game.cfg.CLOSE_BONUS_MAX ? 'Skim! +' : 'Close pass +') + r.bonus);
         }
         const si = Orbit.stageIndexAt(game.cfg, game.score);
         if (si !== stageIdx) enterStage(si);
@@ -276,6 +290,22 @@ function draw() {
   ctx.strokeStyle = rgbStr(tintCur, 0.4);
   ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, game.cfg.PLANET_R + 6, 0, 7); ctx.stroke();
 
+  // Aurora — a gold-green bloom over the planet while the double-score window holds
+  // (depth layer; view-only, colour-based — the soft pulse stills under reduced motion).
+  if (game.phase === 'play' && game.aurora > 0) {
+    const fade = Math.min(1, game.aurora / 60);         // ease out over the last second
+    const pulse = reduceMotion ? 1 : 1 + Math.sin(game.t * 0.1) * 0.08;
+    const ar = (game.cfg.PLANET_R + 26) * pulse;
+    ctx.globalCompositeOperation = 'lighter';
+    const ag = ctx.createRadialGradient(p.x, p.y, game.cfg.PLANET_R * 0.6, p.x, p.y, ar);
+    ag.addColorStop(0, 'rgba(120,255,190,0)');
+    ag.addColorStop(0.7, `rgba(120,255,190,${0.28 * fade})`);
+    ag.addColorStop(1, 'rgba(255,215,120,0)');
+    ctx.fillStyle = ag;
+    ctx.beginPath(); ctx.arc(p.x, p.y, ar, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   // stage-change shockwave expanding out from the planet
   if (stagePulse > 0.01) {
     ctx.globalCompositeOperation = 'lighter';
@@ -307,6 +337,14 @@ function draw() {
     for (const f of flames) {
       ctx.fillStyle = `hsla(28,100%,62%,${f.life / 20})`;
       ctx.beginPath(); ctx.arc(f.x, f.y, 2.4, 0, 7); ctx.fill();
+    }
+    // kiss flashes — a gold ring blooms where a razor-close pickup landed (the tech's
+    // only announcement; it is never explained)
+    for (const k of kissFlashes) {
+      const kt = k.life / 28;
+      ctx.strokeStyle = `hsla(46,95%,62%,${kt})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(k.x, k.y, 10 + (1 - kt) * 26, 0, 7); ctx.stroke();
     }
     // probe
     ctx.globalCompositeOperation = 'source-over';

@@ -2,7 +2,17 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.23.1` (single source of truth: repo-root `VERSION`). **v0.23.1** is a **GROW** run:
+**Version:** `0.23.2` (single source of truth: repo-root `VERSION`). **v0.23.2** is a **GROW** run:
+**Orbit Slingshot** gets the **"depth inside the mechanic"** layer — the **5th game** to carry it
+(after Polarity, Brim, Echo Chamber and Ink Bloom; Tether + Reprise ship with it from birth). On
+the one hold-to-thrust verb: a discoverable **Kiss** (collect a target after passing within a
+razor 7px of the surface → +2 on top of the skim bonus + a gold ring + a streak, taught nowhere —
+the drawn close band hides a sharper edge), the **Aurora** (3 kisses in a row → ~5s in which every
+point doubles — the crash-courting line becomes the richest one), a **no-plateau pickup radius**
+(a smooth score asymptote on top of the stage shrink, hard-floored — replacing the stage-only
+shrink that flat-lined at Deep space / score 120), and a **secret Interstellar stage** past Deep
+space (score 240, revealed only by reaching it). 3 new badges (8 → 11); +10 pure-core tests
+(39 → 49). Also merged Dependabot #47 (ruby/setup-ruby minor). **v0.23.1** was a **GROW** run:
 **Ink Bloom** gets the **"depth inside the mechanic"** layer — the **4th game** to carry it (after
 Polarity, Brim and Echo Chamber; Tether + Reprise ship with it from birth). On the one steer verb:
 a discoverable **Graze** (ride razor-close to your own trail and live → a point + a gold spark +
@@ -190,7 +200,15 @@ sole host), plus each game at `…/games/<game>/`.
   flat difficulty), a **stage arc** (Suborbital → Low orbit → Geostationary → Deep space)
   with HUD chip + planet-halo tint, and **meta-progression** (`orbitslingshot.meta`:
   lifetime targets/skims/best-bonus + 8 badges, run-report) — legacy best preserved. Pure
-  core (symplectic Euler) + 39 tests. **(6th game on varied structure.)**
+  core (symplectic Euler) + 49 tests. **(6th game on varied structure.)** **Depth inside the one
+  verb (v0.23.2, the 5th game on the layer):** the pickup window **no longer plateaus**
+  (`targetRadius` rides a smooth score asymptote on top of the stage shrink, hard-floored at
+  `R_HARD_MINFRAC` — the old stage-only shrink flat-lined at Deep space / score 120); a hidden
+  **Kiss** (the drawn 60px close band hides a razor `KISS_BAND` 7px sub-window — collect a target
+  after passing that close and it pays +2 over the skim bonus, blooms a gold ring and builds a
+  streak, taught nowhere; a timid pickup breaks it); the **Aurora** it unlocks (3 kisses in a row
+  → ~5s where **every point doubles** — announced only when earned, colour-only bloom); and a
+  **secret Interstellar stage** past Deep space (score 240, revealed only by reaching it).
 - **Polarity** (`games/polarity/`) — a **precision-combo** runner: flip cyan/magenta to
   match each gate, but land the flip at the *last instant* to grow a **multiplier**
   (×2…×9) — flip early/safe and it breaks to ×1. **Reference build for both the Growth
@@ -327,11 +345,27 @@ sole host), plus each game at `…/games/<game>/`.
   `sluice.best` preserved. Pure core + 35 tests. **(4th game on varied structure — ships on
   the pattern from day one.)**
 
-**Tests:** **562/562** green, released (Ink Bloom +10). ⚠ **Local gotcha:** the bare `node --test` from repo root now
+**Tests:** **572/572** green, released (Orbit Slingshot +10). ⚠ **Local gotcha:** the bare `node --test` from repo root now
 also walks the git-ignored `assets/references/` hub clone, whose unrelated tests fail (missing deps) —
 scope the run to `node --test "games/**/*.test.js"`. CI never checks out `assets/references/` (it's
 git-ignored), so CI's `node --test` sees only the game tests and is green.
 
+- **✅ v0.23.2 (2026-07-17) — GROW: Orbit Slingshot gets "depth inside the mechanic" (5th game on
+  the layer).** The oldest game without it, with the exact stage-index plateau the sweep item
+  flags (escalation keyed only on the stage index, stages stop at score 120). All four depth
+  items on the one hold-to-thrust verb: the hidden **Kiss** (`KISS_BAND` 7px razor sub-window
+  inside the drawn 60px close band → +2 + gold ring + streak, taught nowhere), the **Aurora**
+  (`KISS_TRIGGER` 3 kisses in a row → `AURORA_TICKS` ~5s every-point-doubles window), a
+  **no-plateau pickup radius** (score asymptote × stage shrink, hard floor 0.5 — regression-pinned
+  still tightening at score 600, override-proof), and a **secret Interstellar stage** (score 240,
+  reveal toast + badge; start tips trimmed so the stage list is no longer printed). 3 new
+  skill-safe badges (8 → 11), `totals.kisses` (lossless legacy upgrade), run-report kisses +
+  auroras. +10 pure-core tests (39 → 49); collection **572/572** green. Also merged Dependabot
+  **#47** (ruby/setup-ruby minor, checks green); majors #46/#31 still held. **Chrome MCP
+  unavailable** → validated by **headless Chrome** probe renders; **a live play-feel eyeball is
+  still worth doing** (knobs: `KISS_BAND` 7 / `KISS_TRIGGER` 3 / `AURORA_TICKS` 300 /
+  `R_SHRINK_K` 150). Player changelog + `_games` date + README re-gen. Released `dev → main` by
+  default on green (PATCH). **Depth-layer rollout: 5 of 13.**
 - **✅ v0.23.1 (2026-07-16) — GROW: Ink Bloom gets "depth inside the mechanic" (4th game on the
   layer, after Polarity, Brim + Echo Chamber).** Ink Bloom was the oldest game without the layer
   and had the exact plateau the sweep item flags: `speedOf` hard-capped at 4.4 around score ~117,
@@ -717,11 +751,16 @@ git-ignored), so CI's `node --test` sees only the game tests and is green.
   with a headless render). Everything checked out, but a live play-feel pass on the carry timing
   (`LAG` = 8, `BRIM_BAND` = 0.10, `MENISCUS` = 0.965) is worth doing — those are the tuning knobs.
 - **✅ Varied-structure rollout: 13 of 13 — COMPLETE.** The **"depth inside the mechanic"** layer
-  (v0.20.0, Polarity = reference) is the **sole lead GROW lever**. **Depth rollout: 4 of 13** —
-  Polarity, Brim, Echo Chamber, **Ink Bloom** (v0.23.1); Tether + Reprise carry it from birth.
-  Take the next game lowest-coverage first (remaining: Orbit Slingshot, Ricochet, Skyline, Loft,
-  Poise, Symmetry, Arc, Sluice — the oldest without the layer is a good default). A game already
-  on both layers can still take one new formation or a cross-run unlock.
+  (v0.20.0, Polarity = reference) is the **sole lead GROW lever**. **Depth rollout: 5 of 13** —
+  Polarity, Brim, Echo Chamber, Ink Bloom, **Orbit Slingshot** (v0.23.2); Tether + Reprise carry
+  it from birth. Take the next game lowest-coverage first (remaining: Ricochet, Skyline, Loft,
+  Poise, Symmetry, Arc, Sluice — **Ricochet** is the oldest without the layer, a good default).
+  A game already on both layers can still take one new formation or a cross-run unlock.
+- **Eyeball Orbit Slingshot in a real browser** (Chrome MCP was down; validated by headless probe
+  renders). Play-feel knobs: `KISS_BAND` (7px) — is a kiss findable by a daring player without
+  being a fluke? — `KISS_TRIGGER` (3) / `AURORA_TICKS` (300) — does the Aurora feel earned? — and
+  the radius asymptote `R_SHRINK_SPAN` (0.30) / `R_SHRINK_K` (150). Also: does **Interstellar**
+  land as a real "there's more" surprise?
 - **Eyeball Ink Bloom in a real browser** (Chrome MCP was down; validated by headless probe
   renders). Play-feel knobs: `GRAZE_BAND` (9px) — is a graze findable by a curious player yet
   genuinely daring? — `GRAZE_COOLDOWN` (60) / `IRI_TRIGGER` (3) / `IRI_TICKS` (300) — does
@@ -757,10 +796,10 @@ git-ignored), so CI's `node --test` sees only the game tests and is green.
 
 | Area | Status |
 |------|--------|
-| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.23.1 release (tagged) |
-| Tests (`node --test`) | ✅ **562/562** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
+| Repo + branches (dev/main) | ✅ Clean — `dev` = `main` at the v0.23.2 release (tagged) |
+| Tests (`node --test`) | ✅ **572/572** green (scope to `games/**`; the git-ignored `assets/references/` clone has unrelated failing tests, not in CI) |
 | Varied-structure rollout | ✅ **COMPLETE — 13/13 games** (Poise closed it out, v0.22.2) |
-| Depth-inside-the-mechanic rollout | 🔄 **4/13** (Polarity, Brim, Echo Chamber, Ink Bloom; Tether + Reprise born with it) — the lead GROW lever |
+| Depth-inside-the-mechanic rollout | 🔄 **5/13** (Polarity, Brim, Echo Chamber, Ink Bloom, Orbit Slingshot; Tether + Reprise born with it) — the lead GROW lever |
 | CI (node --test) | ✅ Workflow in place |
 | GitHub Pages (`fairyfox.io/fairyfox-games/`) | ✅ Sole host — deploys on push to `main` |
 | Netlify | ⛔ Retired 2026-07-02 (`games.fairyfox.io` gone; workflow + config removed) |
