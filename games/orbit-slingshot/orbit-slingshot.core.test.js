@@ -220,11 +220,13 @@ test('collecting a target after a close skim adds the bonus to the score', () =>
   g.pos = { x: planet(g).x + CONFIG.R0, y: planet(g).y };
   g.vel = { x: 0, y: 0 };
   g.target = { x: g.pos.x, y: g.pos.y };
-  g.minDist = surface + 5;                          // skimmed close earlier this lap
+  g.minDist = surface + 20;                         // skimmed close (but outside the kiss window)
   const r = tick(g, { thrust: false });
   assert.equal(r.scored, true);
   assert.ok(r.bonus >= 1, 'a close skim earns a bonus');
+  assert.equal(r.kissed, false, 'close is not razor-close');
   assert.equal(g.score, 1 + r.bonus);
+  assert.equal(r.gain, 1 + r.bonus, 'gain matches the plain skim maths');
   assert.equal(g.minDist, Infinity, 'skim window resets after a pickup');
 });
 
@@ -268,9 +270,10 @@ test('targetRadius equals TARGET_R at stage 0 and shrinks (bounded) at higher st
   const g = newGame();
   g.score = 0;
   assert.equal(targetRadius(g), CONFIG.TARGET_R);
-  g.score = CONFIG.STAGES[CONFIG.STAGES.length - 1].at; // top stage
+  g.score = CONFIG.STAGES[CONFIG.STAGES.length - 1].at; // top (secret) stage
   assert.ok(targetRadius(g) < CONFIG.TARGET_R, 'threading gets harder');
-  assert.ok(targetRadius(g) >= CONFIG.TARGET_R * CONFIG.STAGE_R_MINFRAC - 1e-9, 'bounded');
+  // the depth layer's score asymptote shrinks past the stage floor, but never past the hard one
+  assert.ok(targetRadius(g) >= CONFIG.TARGET_R * CONFIG.R_HARD_MINFRAC - 1e-9, 'bounded');
 });
 
 test('later stages can spawn targets nearer the planet (riskier reaches)', () => {
@@ -320,13 +323,13 @@ test('stageProgress: frac 0 at a boundary, rises toward the next, isLast at the 
 });
 
 // ── 12. Meta-progression ──────────────────────────────────────────────────────
-const summary = (o = {}) => ({ score: 0, stageIndex: 0, targets: 0, skims: 0, bestBonus: 0, ...o });
+const summary = (o = {}) => ({ score: 0, stageIndex: 0, targets: 0, skims: 0, bestBonus: 0, kisses: 0, auroras: 0, ...o });
 
 test('normalizeMeta fills a complete v1 blob and recovers a legacy best', () => {
   const m = normalizeMeta(undefined, 33);
   assert.equal(m.v, 1);
   assert.equal(m.best, 33);
-  assert.deepEqual(m.totals, { targets: 0, skims: 0, points: 0 });
+  assert.deepEqual(m.totals, { targets: 0, skims: 0, points: 0, kisses: 0 });
 });
 
 test('applyRun accumulates totals and raises bests monotonically; pure', () => {
@@ -503,4 +506,138 @@ test('REGRESSION: a seeded fresh run survives frame one with a formation loaded'
   const r = tick(g, { thrust: false });
   assert.equal(r.died, false, 'must not crash or escape on the first tick');
   assert.equal(g.phase, 'play');
+});
+
+// ── 14. Depth inside the mechanic — kiss tech, aurora reversal, no plateau, secret stage ──
+// GM:0 freezes the probe (no gravity, zero circular speed), so pickups and skim depths can
+// be staged deterministically, exactly like the skim-stat tests above.
+
+/** Place the target on the stationary probe with the closest pass forced to `over` px above
+ *  the surface, then tick once — a fully controlled pickup. */
+function stagedPickup(g, over) {
+  g.target = { x: g.pos.x, y: g.pos.y };
+  g.minDist = g.cfg.PLANET_R + g.cfg.PROBE_R + over;
+  return tick(g, { thrust: false });
+}
+
+test('the pickup radius keeps shrinking past the last stage boundary (no plateau)', () => {
+  // REGRESSION: the old stage-only shrink flat-lined at Deep space (score 120) — the exact
+  // "whole ceiling seen in minutes" bug the depth layer exists to kill.
+  const g = newGame();
+  g.score = 150; const r150 = targetRadius(g);
+  g.score = 300; const r300 = targetRadius(g);
+  g.score = 600; const r600 = targetRadius(g);
+  assert.ok(r300 < r150, 'still tightening past the old stage ceiling');
+  assert.ok(r600 < r300, 'and keeps tightening — always creeping, never arriving');
+  assert.ok(r600 >= CONFIG.TARGET_R * CONFIG.R_HARD_MINFRAC - 1e-9, 'never below the hard floor');
+});
+
+test('the radius hard floor holds even under a rogue config override', () => {
+  const g = newGame({ config: { R_SHRINK_SPAN: 5, STAGE_R_SHRINK: 1 } });
+  g.score = 100000;
+  assert.ok(targetRadius(g) >= g.cfg.TARGET_R * g.cfg.R_HARD_MINFRAC - 1e-9);
+});
+
+test('a razor-close pickup is a KISS: extra points on top of the skim bonus, streak builds', () => {
+  const g = createGame(W, H, { rng: seeded(2), config: { GM: 0 } });
+  start(g);
+  const r = stagedPickup(g, CONFIG.KISS_BAND);      // right at the razor edge — still a kiss
+  assert.equal(r.scored, true);
+  assert.equal(r.kissed, true);
+  assert.equal(g.kisses, 1);
+  assert.equal(g.kissStreak, 1);
+  assert.equal(r.gain, 1 + r.bonus + CONFIG.KISS_BONUS, 'kiss pays on top of the skim bonus');
+  assert.equal(g.score, r.gain);
+});
+
+test('a pickup outside the kiss band is not a kiss and breaks the streak', () => {
+  const g = createGame(W, H, { rng: seeded(2), config: { GM: 0 } });
+  start(g);
+  stagedPickup(g, CONFIG.KISS_BAND);                // one kiss banked
+  assert.equal(g.kissStreak, 1);
+  const r = stagedPickup(g, CONFIG.KISS_BAND + 8);  // close (bonus > 0) but not razor-close
+  assert.ok(r.bonus > 0, 'still a rewarded skim');
+  assert.equal(r.kissed, false);
+  assert.equal(g.kissStreak, 0, 'a timid pickup breaks the kiss streak');
+  assert.equal(g.kisses, 1, 'kiss count untouched');
+});
+
+test('KISS_TRIGGER kisses in a row light an aurora; the streak resets', () => {
+  const g = createGame(W, H, { rng: seeded(2), config: { GM: 0 } });
+  start(g);
+  let last = null;
+  for (let i = 0; i < CONFIG.KISS_TRIGGER; i++) {
+    assert.equal(g.aurora, 0, 'no aurora before the trigger');
+    last = stagedPickup(g, 0);                      // dead-on kisses
+    if (i < CONFIG.KISS_TRIGGER - 1) assert.equal(last.auroraStarted, false);
+  }
+  assert.equal(last.auroraStarted, true, 'the trigger kiss lights it');
+  assert.equal(g.aurora, CONFIG.AURORA_TICKS);
+  assert.equal(g.auroras, 1);
+  assert.equal(g.kissStreak, 0, 'streak spent on the aurora');
+});
+
+test('a lit aurora doubles every point, counts down, and expires', () => {
+  const g = createGame(W, H, { rng: seeded(2), config: { GM: 0 } });
+  start(g);
+  for (let i = 0; i < CONFIG.KISS_TRIGGER; i++) stagedPickup(g, 0);
+  assert.ok(g.aurora > 0);
+  const before = g.score;
+  const r = stagedPickup(g, CONFIG.CLOSE_BAND + 50); // a plain far pickup (bonus 0, no kiss)
+  assert.equal(r.bonus, 0);
+  assert.equal(r.kissed, false);
+  assert.equal(r.gain, 1 * CONFIG.AURORA_MULT, 'the aurora doubles even a plain point');
+  assert.equal(g.score, before + r.gain);
+  assert.equal(r.aurora, true);
+  // park the probe far from the target annulus and let the window run out
+  g.pos = { x: 10, y: 10 };
+  g.vel = { x: 0, y: 0 };
+  for (let i = 0; i < CONFIG.AURORA_TICKS + 5; i++) tick(g, { thrust: false });
+  assert.equal(g.aurora, 0, 'the aurora expires');
+  g.pos = { x: planet(g).x + CONFIG.R0, y: planet(g).y };
+  const after = stagedPickup(g, CONFIG.CLOSE_BAND + 50);
+  assert.equal(after.gain, 1, 'no doubling once the window is spent');
+});
+
+test('reset clears the depth-layer state', () => {
+  const g = createGame(W, H, { rng: seeded(2), config: { GM: 0 } });
+  start(g);
+  for (let i = 0; i < CONFIG.KISS_TRIGGER; i++) stagedPickup(g, 0);
+  assert.ok(g.kisses > 0 && g.aurora > 0 && g.auroras > 0);
+  reset(g);
+  assert.equal(g.kisses, 0);
+  assert.equal(g.kissStreak, 0);
+  assert.equal(g.aurora, 0);
+  assert.equal(g.auroras, 0);
+});
+
+test('the secret Interstellar stage sits past Deep space and is flagged', () => {
+  const last = CONFIG.STAGES[CONFIG.STAGES.length - 1];
+  assert.equal(last.name, 'Interstellar');
+  assert.equal(last.secret, true);
+  assert.ok(last.at > 120, 'deeper than the listed arc');
+  assert.equal(stageIndexAt(CONFIG, last.at), CONFIG.STAGES.length - 1);
+  assert.equal(stageIndexAt(CONFIG, last.at - 1), CONFIG.STAGES.length - 2, 'not reached early');
+});
+
+test('meta folds kisses and upgrades a legacy blob losslessly', () => {
+  const legacy = { plays: 3, best: 50, totals: { targets: 100, skims: 5, points: 200 } };
+  const m = normalizeMeta(legacy);
+  assert.equal(m.totals.kisses, 0, 'legacy blob gains the field at zero');
+  assert.equal(m.totals.targets, 100, 'nothing lost');
+  const m2 = applyRun(m, summary({ score: 30, targets: 4, kisses: 2, auroras: 1 }));
+  assert.equal(m2.totals.kisses, 2);
+  assert.equal(m2.totals.targets, 104);
+});
+
+test('depth badges award once earned: kiss, aurora, and the secret stage', () => {
+  let m = normalizeMeta();
+  m = applyRun(m, summary({ score: 10, stageIndex: 1 }));
+  assert.equal(m.achieved['first-kiss'], undefined);
+  assert.equal(m.achieved['aurora'], undefined);
+  assert.equal(m.achieved['reach-interstellar'], undefined);
+  m = applyRun(m, summary({ score: 250, stageIndex: 4, kisses: 3, auroras: 1 }));
+  assert.equal(m.achieved['first-kiss'], true);
+  assert.equal(m.achieved['aurora'], true);
+  assert.equal(m.achieved['reach-interstellar'], true);
 });

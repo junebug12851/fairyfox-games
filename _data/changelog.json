@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-07-17",
+    "game": "Orbit Slingshot",
+    "slug": "orbit-slingshot",
+    "kind": "grow",
+    "text": "The planet has learned to reward the truly daring. The close-pass bonus was always on the sign — swing low over the surface on your way to a target and it pays extra. But there's a razor line even lower that the sign doesn't mention: collect a target after passing close enough to all but scrape the surface and it's a kiss — a gold ring blooms where you took it, and it pays over and above the skim. String three kisses together without a timid pickup in between and the sky answers: an aurora crowns the planet, and for a few seconds every point you take is worth double — so the flight path that flirts with a crash is quietly the richest line in the game. The targets also never stop tightening now: the pickup window used to stop shrinking at Deep space and coast forever, and now it keeps creeping smaller the higher you score, so a long run always asks for a finer thread. And past Deep space there's a stage that isn't on the sign at all — fly deep enough and you'll see it."
+  },
+  {
     "date": "2026-07-16",
     "game": "Ink Bloom",
     "slug": "ink-bloom",
