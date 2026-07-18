@@ -2,7 +2,13 @@
 
 _Current state only._ For history see `sessions/`; for the changelog see `version.md`.
 
-**Version:** `0.24.1` (single source of truth: repo-root `VERSION`). **v0.24.1** is a
+**Version:** `0.24.2` (single source of truth: repo-root `VERSION`). **v0.24.2** adopts the hub's
+**shared-chrome header** (chrome bundle **v2.0.0**): the fixed primary nav now groups Stories + Games
+under a **Farms** dropdown (a native `<details>`; `nav.js` adds one-open / outside-click / Escape).
+Surgical — the dropdown CSS + hamburger were already vendored, so only the header markup + `nav.js`
+changed; **local divergences kept** (Games → this site's root not the hub `/games/` stub; Farms +
+Games always `.active` since this node *is* Games; self-hosted favicon/masthead + shared-fox logo
+untouched). Previewed in headless Chrome (nav closed/open, mobile, full landing page). **v0.24.1** is a
 **HOUSEKEEPING** run: the owner rename (`junebug12851` → `1fairyfox`) across every live reference
 + the git remote (dated history left as an accurate record), the **three missing game icons**
 (Ward / Reprise / Brim now ship a 512×512 `icon.png` in the dark-neon app-tile style — this
@@ -415,6 +421,19 @@ also walks the git-ignored `assets/references/` hub clone, whose unrelated tests
 scope the run to `node --test "games/**/*.test.js"`. CI never checks out `assets/references/` (it's
 git-ignored), so CI's `node --test` sees only the game tests and is green.
 
+- **✅ v0.24.2 (2026-07-18) — Adopt the hub's shared-chrome header (Farms nav dropdown, chrome
+  bundle v2.0.0).** The v0.24.1 check had reported this bundle as held; the owner then asked for it.
+  The hub groups its two "grown daily" collections (Stories + Games) under a **Farms** `<details>`
+  dropdown; this node's header now matches — the flat "Games" link becomes **Farms → Stories · Games**.
+  Small/surgical: `styles.css` already carried the `.dd`/`.nav-toggle` CSS and the header already had
+  the hamburger + brand-name, so only `_includes/header.html` + `assets/nav.js` (adopted the hub's
+  dropdown-aware version) changed. **Local divergences preserved:** Games → this site's root (not the
+  hub `/games/` redirect stub — the white-flash fix), Farms summary + Games link always `.active`
+  (this node *is* Games), self-hosted favicon/masthead + shared-fox brand logo untouched, subnav kept.
+  Scoped *out* (not needed, higher risk): re-vendoring `reader.js` + the hub's newer card/`.tech` CSS.
+  Previewed in headless Chrome — nav closed/open, mobile hamburger, and the full landing page with the
+  injected "Aa" button — all clean. 630/630 green; clean Jekyll build. Process report
+  `2026-07-18-adopting-updates.md`. Released `dev → main` by default on green (PATCH).
 - **✅ v0.24.1 (2026-07-18) — HOUSEKEEPING: owner rename, the 3 missing icons, a fallback, a
   fairyfox check.** (1) **Rename** `junebug12851` → `1fairyfox` across every live reference
   (README badges, `package.json`, `CLAUDE.md`, `legal/{terms,privacy}.html` + their "Last

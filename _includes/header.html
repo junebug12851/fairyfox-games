@@ -1,6 +1,10 @@
-<!-- Header: a copy of the fairyfox.io site header (brand, logo, colours, nav style).
-     The brand on the left is the way home. "Games" sits right of Projects, matching the
-     hub. The reader ("Aa") button is injected by assets/reader.js just after the nav. -->
+<!-- Header: the shared fairyfox.io masthead (brand + fixed primary nav), adopted from the
+     hub's shared-chrome bundle (chrome/VERSION 2.0.0). Stories + Games live under the "Farms"
+     dropdown (nav.js drives it; native <details> works with JS off). Two deliberate local
+     divergences from the byte-identical bundle: (1) the Games link points at THIS site's root
+     (not the hub's /games/ redirect stub) to avoid the white-flash reload; (2) this node IS the
+     Games collection, so the Farms summary + Games link are always .active. The reader ("Aa")
+     button is injected by assets/reader.js just after the nav. -->
 <header class="site-header">
   <div class="wrap">
     <a class="brand" href="https://fairyfox.io/">
@@ -15,7 +19,18 @@
     <nav class="nav" aria-label="Primary">
       <a href="https://fairyfox.io/">Home</a>
       <a href="https://fairyfox.io/projects/">Projects</a>
-      <a href="{{ '/' | relative_url }}" class="active">Games</a>
+      <!-- Farms groups the two "grown daily" collections — Stories + Games. -->
+      <details class="dd">
+        <summary class="active">Farms</summary>
+        <div class="dd-panel">
+          <div class="dd-group">
+            <div class="dd-links">
+              <a href="https://fairyfox.io/stories/">Stories</a>
+              <a href="{{ '/' | relative_url }}" class="active">Games</a>
+            </div>
+          </div>
+        </div>
+      </details>
       <a href="https://fairyfox.io/docs/">Docs</a>
       <a href="https://fairyfox.io/blog/">Updates</a>
       <a href="https://fairyfox.io/about/">About</a>
