@@ -12,7 +12,7 @@
  * silently dead screen.
  */
 import * as Echo from './echo-chamber.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 // Tell the in-page fallback we booted (see index.html).
 window.__echoChamberBooted = true;

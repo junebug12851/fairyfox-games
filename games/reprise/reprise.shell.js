@@ -15,7 +15,7 @@ import {
   createGame, start as startGame, tick, press, beatAt, milestoneAt,
   stageIndexAt, stageProgress, normalizeMeta, applyRun, newlyEarned, ACHIEVEMENTS,
 } from './reprise.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 window.__repriseBooted = true;
 

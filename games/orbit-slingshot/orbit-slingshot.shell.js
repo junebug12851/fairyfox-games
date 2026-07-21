@@ -12,7 +12,7 @@
  * silently dead screen.
  */
 import * as Orbit from './orbit-slingshot.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 window.__orbitSlingshotBooted = true;
 

@@ -12,7 +12,7 @@
  * load failure is never a silently dead screen.
  */
 import * as Loft from './loft.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 // Tell the in-page fallback we booted (see index.html).
 window.__loftBooted = true;

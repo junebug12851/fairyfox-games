@@ -22,7 +22,7 @@ import {
   createGame, start as startGame, route, tick, milestoneAt,
   stageIndexAt, stageProgress, normalizeMeta, applyRun, newlyEarned, ACHIEVEMENTS,
 } from './sluice.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 window.__sluiceBooted = true;
 
