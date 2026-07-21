@@ -21,7 +21,7 @@ import {
   stageIndexAt, stageProgress, normalizeMeta, applyRun, newlyEarned, nearMissLine,
   ACHIEVEMENTS,
 } from './tether.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 window.__tetherBooted = true;
 

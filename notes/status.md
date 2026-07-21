@@ -33,7 +33,7 @@ owner-authorized **coins** economy landed in five parts: **(1) standards** — t
 `assets/coins.js` vendored verbatim + wired into the site chrome (the coin button by the "Aa"
 reader), and Privacy/Cookies/Terms disclose the device-only balance, the no-monetary-value clause,
 and the shared `/legal/coins/` link; **(3) shared module** — a pure, tested
-`games/_shared/coins-earn.core.js` (earn cap **≤3/game/day**: +1 a new stage, +1 a new record,
+`games/shared/coins-earn.core.js` (earn cap **≤3/game/day**: +1 a new stage, +1 a new record,
 atop the shared page-view coin) + a thin `coins-game.js` wallet bridge, proven on **Polarity**;
 **(4+5) every game** — each of the 15 earns the capped coins and gains **one optional, consumable,
 cosmetic fun mode bought for 1 coin** (Polarity Disco · Ward Aurora shield · Brim Fizz · Tether

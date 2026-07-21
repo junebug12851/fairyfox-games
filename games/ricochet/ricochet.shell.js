@@ -17,7 +17,7 @@
  * a classic-script boot-failure fallback so a load error is never a dead screen.
  */
 import * as R from './ricochet.core.js';
-import { grantForRun, spend, balance, onBalance, coinsReady } from '../_shared/coins-game.js';
+import { grantForRun, spend, balance, onBalance, coinsReady } from '../shared/coins-game.js';
 
 window.__ricochetBooted = true;
 
